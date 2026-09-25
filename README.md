@@ -48,6 +48,8 @@ Three ways to run it:
 
 One Cloudflare Worker serves the web app and the API. Cloudflare Access sits in front of it, so nobody reaches the page without signing in, and the worker checks the signed-in identity again on every request.
 
+Out of the box it uses Growably's own palette: orange for buttons and the active menu item, blue for links and labels, navy for the sidebar. Administrators can swap in their own logo and colours under Settings.
+
 The first person to sign in after deployment chooses the administrators and pastes in the API keys. Keys are encrypted with a secret only your worker holds (`CONFIG_KEY`) before they are stored, and the app never shows a key in full again. Administrators can change keys, users, branding and the brief profile under Settings. Everyone else gets Add Contact and Enrich Contact.
 
 ## What it writes to Growably

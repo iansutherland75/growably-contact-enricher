@@ -6,11 +6,15 @@
 const BRANDING_KEY = 'config:branding';
 const PROFILE_KEY  = 'config:briefProfile';
 
+// Defaults follow the Growably palette: orange for actions, blue for links.
 export const DEFAULT_BRANDING = {
   appName: 'Lead Enrichment',
   logoDataUrl: '',
-  brandColor: '#005488',
+  brandColor: '#e87a25',
+  accentColor: '#0f5aac',
 };
+
+const HEX_RE = /^#[0-9a-fA-F]{6}$/;
 
 export const DEFAULT_PROFILE = {
   repName: '',
@@ -42,8 +46,13 @@ export async function setBranding(env, patch) {
   }
   if ('brandColor' in patch) {
     const v = String(patch.brandColor ?? '').trim();
-    if (v && !/^#[0-9a-fA-F]{6}$/.test(v)) throw new Error('Brand colour must be a six-digit hex value like #005488.');
+    if (v && !HEX_RE.test(v)) throw new Error('Brand colour must be a six-digit hex value like #e87a25.');
     next.brandColor = v || DEFAULT_BRANDING.brandColor;
+  }
+  if ('accentColor' in patch) {
+    const v = String(patch.accentColor ?? '').trim();
+    if (v && !HEX_RE.test(v)) throw new Error('Accent colour must be a six-digit hex value like #0f5aac.');
+    next.accentColor = v || DEFAULT_BRANDING.accentColor;
   }
   if ('logoDataUrl' in patch) {
     const v = String(patch.logoDataUrl ?? '');

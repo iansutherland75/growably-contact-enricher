@@ -1,22 +1,34 @@
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/*
+ * Default palette follows Growably: orange for actions and the active item,
+ * blue for links and section labels, navy for the sidebar and dark surfaces.
+ * Administrators can change the two brand colours under Settings; app.js
+ * rewrites --color-primary* and --color-accent* at runtime from that.
+ */
 :root {
-  --color-primary:       #005488;
-  --color-primary-dark:  #003d63;
-  --color-primary-light: #e6f0f7;
-  --color-accent:        #0074BB;
-  --color-accent-dark:   #005d96;
+  --color-primary:       #e87a25;
+  --color-primary-dark:  #c4621a;
+  --color-primary-light: #fdf1e8;
+  --color-accent:        #0f5aac;
+  --color-accent-dark:   #0b4585;
+  --focus-ring:          rgba(15, 90, 172, 0.22);
 
-  --color-black:         #111111;
-  --color-gray-text:     #6B7A8D;
-  --color-gray-mid:      #D1D9E0;
-  --color-gray-light:    #F4F6F8;
+  --color-navy:          #111828;
+  --color-navy-deep:     #0e182c;
+  --sidebar-text:        #f1f9ff;
+  --sidebar-muted:       #b3bfd3;
+
+  --color-black:         #171741;
+  --color-gray-text:     #475569;
+  --color-gray-mid:      #cbd5e0;
+  --color-gray-light:    #f1f5f9;
   --color-white:         #FFFFFF;
 
-  --color-success:       #1E8A44;
+  --color-success:       #10b981;
   --color-warning:       #D97706;
-  --color-error:         #C0392B;
-  --color-info:          #0074BB;
+  --color-error:         #e63228;
+  --color-info:          #0f5aac;
 
   --radius-sm:   4px;
   --radius-md:   6px;
@@ -40,12 +52,13 @@
 /* Applied by setting data-theme="dark" on <html>. Preference stored in localStorage. */
 
 [data-theme="dark"] {
-  --color-black:         #e2e8f0;
-  --color-white:         #1a1d27;
-  --color-gray-light:    #12151e;
-  --color-gray-mid:      #2d3748;
+  --color-black:         #f1f9ff;
+  --color-white:         #111828;
+  --color-gray-light:    #0e182c;
+  --color-gray-mid:      #2a3650;
   --color-gray-text:     #94a3b8;
-  --color-primary-light: #0d2d44;
+  --color-primary-light: #2f2628;
+  --color-accent:        #4d8fdc;
 
   --shadow-sm: 0 1px 3px rgba(0,0,0,0.4);
   --shadow-md: 0 2px 8px rgba(0,0,0,0.5);
@@ -143,8 +156,8 @@ body {
 
 .sidebar {
   grid-area: sidebar;
-  background: var(--color-white);
-  border-right: 1px solid var(--color-gray-mid);
+  background: var(--color-navy);
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
   gap: 32px;
@@ -188,7 +201,7 @@ body {
 .brand-name {
   font-size: 14px;
   font-weight: 700;
-  color: var(--color-black);
+  color: var(--sidebar-text);
   line-height: 1.3;
 }
 
@@ -206,7 +219,7 @@ body {
   border-radius: var(--radius-md);
   border: none;
   background: transparent;
-  color: var(--color-gray-text);
+  color: var(--sidebar-muted);
   cursor: pointer;
   font-family: var(--font-body);
   font-size: 14px;
@@ -217,13 +230,13 @@ body {
 }
 
 .nav-item:hover {
-  background: var(--color-gray-light);
-  color: var(--color-black);
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--sidebar-text);
 }
 
 .nav-item.active {
-  background: var(--color-primary-light);
-  color: var(--color-primary);
+  background: var(--color-primary);
+  color: #fff;
   font-weight: 600;
 }
 
@@ -354,7 +367,7 @@ body {
 .text-input:focus {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(0, 116, 187, 0.2);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 /* ── Buttons ────────────────────────────────────────────────────────────────── */
@@ -396,7 +409,7 @@ body {
 
 .btn-secondary {
   background: var(--color-white);
-  color: var(--color-primary);
+  color: var(--color-black);
   border: 1px solid var(--color-gray-mid);
 }
 
@@ -892,8 +905,8 @@ body {
 }
 
 .btn-secondary .spinner {
-  border-color: rgba(0,84,136,0.25);
-  border-top-color: var(--color-primary);
+  border-color: rgba(128,128,128,0.3);
+  border-top-color: var(--color-black);
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
@@ -1093,7 +1106,7 @@ body {
 
 .sidebar-divider {
   height: 1px;
-  background: var(--color-gray-mid);
+  background: rgba(255, 255, 255, 0.1);
   margin: 8px 0;
 }
 
@@ -1111,7 +1124,7 @@ body {
   transition: background var(--transition);
 }
 
-.profile-card:hover { background: var(--color-gray-light); }
+.profile-card:hover { background: rgba(255, 255, 255, 0.07); }
 
 .profile-avatar-wrap {
   width: 32px;
@@ -1133,8 +1146,8 @@ body {
   width: 32px;
   height: 32px;
   border-radius: var(--radius-full);
-  background: var(--color-primary-light);
-  color: var(--color-primary);
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--sidebar-text);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1150,7 +1163,7 @@ body {
 .profile-name {
   font-size: 13px;
   font-weight: 600;
-  color: var(--color-black);
+  color: var(--sidebar-text);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1158,7 +1171,7 @@ body {
 
 .profile-email {
   font-size: 11px;
-  color: var(--color-gray-text);
+  color: var(--sidebar-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1169,7 +1182,7 @@ body {
   height: 24px;
   border: none;
   background: transparent;
-  color: var(--color-gray-text);
+  color: var(--sidebar-muted);
   cursor: pointer;
   border-radius: var(--radius-sm);
   display: flex;
@@ -1180,14 +1193,14 @@ body {
 }
 
 .profile-menu-btn:hover {
-  background: var(--color-gray-mid);
-  color: var(--color-black);
+  background: rgba(255, 255, 255, 0.14);
+  color: var(--sidebar-text);
 }
 
 /* Dropdown anchored above the profile card */
 .profile-dropdown {
-  background: var(--color-white);
-  border: 1px solid var(--color-gray-mid);
+  background: #1a2540;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: var(--radius-md);
   box-shadow: var(--shadow-md);
   overflow: hidden;
@@ -1202,7 +1215,7 @@ body {
   padding: 10px 14px;
   border: none;
   background: transparent;
-  color: var(--color-black);
+  color: var(--sidebar-text);
   font-family: var(--font-body);
   font-size: 13px;
   font-weight: 500;
@@ -1211,7 +1224,7 @@ body {
   transition: background var(--transition);
 }
 
-.profile-dropdown-item:hover { background: var(--color-gray-light); }
+.profile-dropdown-item:hover { background: rgba(255, 255, 255, 0.08); }
 
 /* ── User management ────────────────────────────────────────────────────────── */
 
@@ -1342,7 +1355,7 @@ body {
 .text-area:focus {
   outline: none;
   border-color: var(--color-accent);
-  box-shadow: 0 0 0 3px rgba(0, 116, 187, 0.2);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .form-grid {

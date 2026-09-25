@@ -127,7 +127,7 @@ function applyTheme(dark) {
   try { localStorage.setItem('theme', dark ? 'dark' : 'light'); } catch { /* ignore */ }
   const toggle = document.getElementById('dark-mode-toggle');
   if (toggle) toggle.setAttribute('aria-checked', String(dark));
-  if (CONFIG?.branding) applyBrandColor(CONFIG.branding.brandColor);
+  if (CONFIG?.branding) applyBrandColor(CONFIG.branding.brandColor, CONFIG.branding.accentColor);
 }
 
 document.getElementById('dark-mode-toggle').addEventListener('click', (e) => {
@@ -149,22 +149,32 @@ function rgbToHex([r, g, b]) {
 
 /** Blend `hex` toward `withHex` by `weight` (0 keeps hex, 1 gives withHex). */
 function mix(hex, withHex, weight) {
-  const a = hexToRgb(hex) ?? [0, 84, 136];
+  const a = hexToRgb(hex) ?? [232, 122, 37];
   const b = hexToRgb(withHex) ?? [255, 255, 255];
   return rgbToHex(a.map((v, i) => v + (b[i] - v) * weight));
 }
 
-/** Push the brand colour into the CSS variables the stylesheet already uses. */
-function applyBrandColor(hex) {
-  if (!hexToRgb(hex)) hex = '#005488';
+const DEFAULT_PRIMARY = '#e87a25';
+const DEFAULT_ACCENT  = '#0f5aac';
+
+/**
+ * Push the two brand colours into the CSS variables the stylesheet uses.
+ * Primary drives buttons, the active nav item and progress; accent drives
+ * links, section labels and focus rings.
+ */
+function applyBrandColor(primary, accent) {
+  if (!hexToRgb(primary)) primary = DEFAULT_PRIMARY;
+  if (!hexToRgb(accent))  accent  = DEFAULT_ACCENT;
   const dark = document.documentElement.getAttribute('data-theme') === 'dark';
   const root = document.documentElement.style;
-  root.setProperty('--color-primary',       hex);
-  root.setProperty('--color-primary-dark',  mix(hex, '#000000', 0.25));
-  root.setProperty('--color-primary-light', dark ? mix(hex, '#12151e', 0.78) : mix(hex, '#ffffff', 0.9));
-  root.setProperty('--color-accent',        dark ? mix(hex, '#ffffff', 0.25) : mix(hex, '#ffffff', 0.1));
-  root.setProperty('--color-accent-dark',   hex);
-  root.setProperty('--color-info',          hex);
+  root.setProperty('--color-primary',       primary);
+  root.setProperty('--color-primary-dark',  mix(primary, '#000000', 0.18));
+  root.setProperty('--color-primary-light', dark ? mix(primary, '#111828', 0.86) : mix(primary, '#ffffff', 0.9));
+  root.setProperty('--color-accent',        dark ? mix(accent, '#ffffff', 0.3) : accent);
+  root.setProperty('--color-accent-dark',   mix(accent, '#000000', 0.2));
+  root.setProperty('--color-info',          accent);
+  const [r, g, b] = hexToRgb(accent);
+  root.setProperty('--focus-ring', `rgba(${r}, ${g}, ${b}, 0.22)`);
 }
 
 function letterMark(name) {
@@ -195,8 +205,8 @@ function applyBranding(b) {
     mark.classList.remove('hidden');
   }
 
-  applyBrandColor(b?.brandColor);
-  document.getElementById('favicon').href = b?.logoDataUrl || defaultFavicon(b?.brandColor || '#005488', letterMark(name));
+  applyBrandColor(b?.brandColor, b?.accentColor);
+  document.getElementById('favicon').href = b?.logoDataUrl || defaultFavicon(hexToRgb(b?.brandColor) ? b.brandColor : DEFAULT_PRIMARY, letterMark(name));
 }
 
 // ── Services (shared by first-run setup and Settings) ─────────────────────────
@@ -548,6 +558,8 @@ function loadBrandingForm() {
   document.getElementById('brand-app-name').value = b.appName;
   document.getElementById('brand-color').value = b.brandColor;
   document.getElementById('brand-color-hex').value = b.brandColor;
+  document.getElementById('accent-color').value = b.accentColor || DEFAULT_ACCENT;
+  document.getElementById('accent-color-hex').value = b.accentColor || DEFAULT_ACCENT;
   const preview = document.getElementById('brand-logo-preview');
   if (b.logoDataUrl) { preview.src = b.logoDataUrl; preview.classList.remove('hidden'); }
   else { preview.removeAttribute('src'); preview.classList.add('hidden'); }
@@ -560,6 +572,12 @@ document.getElementById('brand-color').addEventListener('input', (e) => {
 });
 document.getElementById('brand-color-hex').addEventListener('input', (e) => {
   if (hexToRgb(e.target.value)) document.getElementById('brand-color').value = e.target.value;
+});
+document.getElementById('accent-color').addEventListener('input', (e) => {
+  document.getElementById('accent-color-hex').value = e.target.value;
+});
+document.getElementById('accent-color-hex').addEventListener('input', (e) => {
+  if (hexToRgb(e.target.value)) document.getElementById('accent-color').value = e.target.value;
 });
 
 document.getElementById('brand-logo-file').addEventListener('change', (e) => {
@@ -589,6 +607,7 @@ document.getElementById('brand-save').addEventListener('click', async (e) => {
   const patch = {
     appName: document.getElementById('brand-app-name').value,
     brandColor: document.getElementById('brand-color-hex').value.trim(),
+    accentColor: document.getElementById('accent-color-hex').value.trim(),
   };
   if (pendingLogo !== undefined) patch.logoDataUrl = pendingLogo;
   btn.disabled = true;
