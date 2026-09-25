@@ -836,12 +836,6 @@ document.querySelectorAll('.nav-item').forEach(btn => {
   });
 });
 
-// Dark mode toggle inside the settings view
-document.getElementById('dark-mode-toggle').addEventListener('click', (e) => {
-  const isDark = e.currentTarget.getAttribute('aria-checked') === 'true';
-  applyTheme(!isDark);
-});
-
 // ── Add Contact ───────────────────────────────────────────────────────────────
 
 async function doAddContact() {
