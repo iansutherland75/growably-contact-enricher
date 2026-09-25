@@ -25,8 +25,6 @@ export const FIELD_DEFS = [
     aliases: ['contact.mobile_number', 'contact.mobile__cell_number'] },
   { key: 'employeeCount', name: 'Employee Count', dataType: 'NUMERICAL',  placeholder: '',
     aliases: ['contact.employee_count'] },
-  { key: 'emailStatus',   name: 'Email Status',   dataType: 'TEXT',       placeholder: 'valid / invalid / unknown',
-    aliases: ['contact.email_status'] },
   { key: 'enrichDate',    name: 'Enrich Date',    dataType: 'TEXT',       placeholder: '2026-01-15T10:00:00.000Z',
     aliases: ['contact.enrich_date'] },
   { key: 'enrichError',   name: 'Enrich Error',   dataType: 'LARGE_TEXT', placeholder: '',

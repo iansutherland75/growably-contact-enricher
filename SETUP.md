@@ -106,7 +106,7 @@ If a yellow box says `CONFIG_KEY` is not set, the secret from step 1 did not tak
 
 ## Step 4: Create the Growably fields
 
-Enrichment writes to nine custom fields. The app creates them for you.
+Enrichment writes to eight custom fields. The app creates them for you.
 
 1. Open Settings in the left sidebar.
 2. Find the Growably fields card. Every row says Missing.

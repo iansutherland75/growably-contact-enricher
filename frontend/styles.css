@@ -65,10 +65,6 @@
   --shadow-lg: 0 8px 24px rgba(0,0,0,0.6);
 }
 
-/* Email status badges need explicit dark-mode palette (colours are hardcoded, not CSS vars) */
-[data-theme="dark"] .email-status-badge.es-valid   { background: #064e3b; color: #6ee7b7; }
-[data-theme="dark"] .email-status-badge.es-warning { background: #451a03; color: #fcd34d; }
-[data-theme="dark"] .email-status-badge.es-invalid { background: #450a0a; color: #fca5a5; }
 
 /* ── Settings view ──────────────────────────────────────────────────────────── */
 
@@ -1039,22 +1035,6 @@ body {
   opacity: 0.7;
   vertical-align: middle;
 }
-
-/* ── Email status badge ─────────────────────────────────────────────────────── */
-
-.email-status-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: var(--radius-full);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.03em;
-  text-transform: uppercase;
-}
-
-.email-status-badge.es-valid   { background: #d1fae5; color: #065f46; }
-.email-status-badge.es-warning { background: #fef3c7; color: #92400e; }
-.email-status-badge.es-invalid { background: #fee2e2; color: #991b1b; }
 
 /* ── Brief options ──────────────────────────────────────────────────────────── */
 

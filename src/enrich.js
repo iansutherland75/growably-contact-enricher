@@ -543,11 +543,6 @@ async function enrichFromApollo(email, env) {
   if (person.title)        result.jobTitle    = person.title;
   if (person.linkedin_url) result.linkedinUrl = person.linkedin_url.split('?')[0];
 
-  // Apollo email status feeds the Email Status field and the email-* tag.
-  // "bounced" also sets the email DND flag on the contact.
-  const apolloStatusMap = { verified: 'valid', bounced: 'invalid', guessed: 'unknown', unavailable: 'unknown' };
-  if (person.email_status) result.emailStatus = apolloStatusMap[person.email_status] ?? 'unknown';
-
   // Prefer mobile > direct dial > any number - phones arrive via webhook, not here
   const phones = person.phone_numbers ?? [];
   const best   = phones.find(p => p.type === 'mobile')
@@ -671,7 +666,7 @@ async function resolveFullName(contact, env) {
  * Pipeline (in order):
  *   0.   Name normalization - fix ALL CAPS / all-lowercase names
  *   0.5  Name completion - fill missing first/last name from email or Brave
- *   1.   Apollo - person data, email status, org size and location
+ *   1.   Apollo - person data, org size and location
  *   2.   Brave → LinkedIn (fallback if Apollo had no record)
  *   3.   Brave → Twitter/X
  *   4.   Company website scrape + Brave search fallback
@@ -763,24 +758,6 @@ export async function enrichContact(contact, env) {
     catch (e) { errors.push(`Apollo: ${e.message}`); }
   } else if (!env.APOLLO_API_KEY) {
     errors.push('Apollo: API key not set');
-  }
-
-  // Email status comes from Apollo's verification of the address.
-  const finalEmailStatus = apollo?.emailStatus ?? null;
-  if (finalEmailStatus) {
-    found.emailStatus = finalEmailStatus;
-    setField('emailStatus', finalEmailStatus);
-    await ghlPost(`/contacts/${contact.id}/tags`, { tags: [`email-${finalEmailStatus}`] }, env).catch(() => {});
-
-    if (finalEmailStatus === 'invalid') {
-      updates.dndSettings = {
-        Email: {
-          status: 'active',
-          message: `Email flagged as ${finalEmailStatus} by Apollo. Do not email.`,
-          code: finalEmailStatus,
-        },
-      };
-    }
   }
 
   if (apollo) {

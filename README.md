@@ -20,7 +20,6 @@ Point it at a contact and it fills in what is missing, without overwriting anyth
 | Company name, website, phone, address | The company's own website |
 | Employee count | Apollo.io |
 | Mobile number | Apollo.io (arrives a minute or two after enrichment) |
-| Email status: valid, invalid, unknown | Apollo.io. Invalid addresses get the email DND flag in Growably |
 | Twitter / X profile | Brave Search |
 | Sector tag: healthcare, legal, accounting, insurance, nonprofit, general | Company name, domain and title |
 
@@ -54,15 +53,15 @@ The first person to sign in after deployment chooses the administrators and past
 
 ## What it writes to Growably
 
-**Custom fields**, created for you from Settings with one click: LinkedIn URL, Twitter URL, Job Title, Company Domain, Mobile Number, Employee Count, Email Status, Enrich Date, Enrich Error.
+**Custom fields**, created for you from Settings with one click: LinkedIn URL, Twitter URL, Job Title, Company Domain, Mobile Number, Employee Count, Enrich Date, Enrich Error.
 
 **Standard fields**, only when empty: first name, last name, company name, website, phone, address, city, state or province, postal code, country.
 
-**Tags**: `email-valid`, `email-invalid`, `email-unknown`, `sector-healthcare` and the other sector tags, and `nurture` when you press the Nurture button.
+**Tags**: `sector-healthcare` and the other sector tags, and `nurture` when you press the Nurture button.
 
 **Notes**: one per brief.
 
-**DND**: email DND is switched on when Apollo reports the address as bounced.
+Email verification is not part of this version. Nothing is written to email DND.
 
 ## Data and privacy
 

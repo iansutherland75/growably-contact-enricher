@@ -89,7 +89,6 @@ function enrichStatus(contact) {
 function fieldRows(contact) {
   return [
     { name: 'Email',          value: contact.email },
-    { name: 'Email Status',   value: cf(contact, FIELDS.emailStatus), emailStatus: true },
     { name: 'Phone',          value: contact.phone, applyKeys: ['companyPhone'] },
     { name: 'Mobile',         value: cf(contact, FIELDS.mobileNumber) },
     { name: 'Company',        value: contact.companyName, applyKeys: ['companyName'] },
@@ -927,7 +926,7 @@ async function doAddContact() {
           const found = result.found ?? {};
           const FIELD_LABELS = {
             firstName: 'First Name', lastName: 'Last Name', linkedinUrl: 'LinkedIn',
-            jobTitle: 'Job Title', emailStatus: 'Email Status', numEmployees: 'Employees',
+            jobTitle: 'Job Title', numEmployees: 'Employees',
             mobilePhone: 'Mobile', website: 'Website', twitter: 'Twitter / X',
             companyDomain: 'Company Domain', sectorTag: 'Sector', city: 'City',
             address1: 'Address', companyName: 'Company', companyPhone: 'Company Phone',
@@ -959,7 +958,6 @@ async function doAddContact() {
       lastName:      'Last Name',
       linkedinUrl:   'LinkedIn',
       jobTitle:      'Job Title',
-      emailStatus:   'Email Status',
       numEmployees:  'Employees',
       mobilePhone:   'Mobile',
       website:       'Website',
@@ -1148,26 +1146,6 @@ function renderLinkValue(value) {
 }
 
 /**
- * Colour-coded badge for email validation results.
- * Green  → valid (safe to email)
- * Amber  → catch-all or unknown (deliverability uncertain)
- * Red    → invalid or do-not-mail (the worker also sets email DND in Growably)
- */
-const EMAIL_STATUS_META = {
-  valid:        { cls: 'es-valid',   label: 'Valid' },
-  'catch-all':  { cls: 'es-warning', label: 'Catch-all' },
-  unknown:      { cls: 'es-warning', label: 'Unknown' },
-  invalid:      { cls: 'es-invalid', label: 'Invalid' },
-  'do-not-mail':{ cls: 'es-invalid', label: 'Do not mail' },
-};
-
-function renderEmailStatus(value) {
-  if (!value) return null;
-  const meta = EMAIL_STATUS_META[value] ?? { cls: 'es-warning', label: value };
-  return `<span class="email-status-badge ${meta.cls}">${meta.label}</span>`;
-}
-
-/**
  * Render the field diff table showing current Growably values vs enriched values.
  *
  * newValues is a dict of { fieldName: enrichedValue } populated after a successful
@@ -1201,7 +1179,6 @@ function renderFieldTable(contact, newValues, suggestedValues = {}) {
     const hasSuggestion = Object.keys(rowSuggestions).length > 0;
 
     const formatValue = (val) => {
-      if (row.emailStatus) return renderEmailStatus(val) ?? val;
       if (row.link)        return renderLinkValue(val);
       return val;
     };
@@ -1326,7 +1303,6 @@ document.getElementById('enrich-btn').addEventListener('click', async () => {
     const newValues = {
       'LinkedIn':      found.linkedinUrl    ?? null,
       'Job Title':     found.jobTitle       ?? null,
-      'Email Status':  found.emailStatus    ?? null,
       'Employees':     found.numEmployees   ? String(found.numEmployees) : null,
       'Mobile':        found.mobilePhone    ?? null,
       'Website':       found.website        ?? null,
@@ -1355,7 +1331,6 @@ document.getElementById('enrich-btn').addEventListener('click', async () => {
     const FIELD_LABELS = {
       linkedinUrl:   'LinkedIn',
       jobTitle:      'Job Title',
-      emailStatus:   'Email Status',
       numEmployees:  'Employees',
       mobilePhone:   'Mobile',
       website:       'Website',
