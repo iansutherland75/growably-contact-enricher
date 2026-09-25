@@ -41,7 +41,7 @@ If you rotate `CONFIG_KEY` itself (Cloudflare dashboard, your worker, Settings, 
 `ACCESS_TEAM_DOMAIN` or `ACCESS_APP_AUD` is blank, still says `pending`, or is malformed. The team domain must end in `.cloudflareaccess.com` and the AUD tag is 64 characters. Fix them under Variables and Secrets, wait a minute, reload.
 
 **"Your sign-in could not be verified"**
-The two values are present but do not match the Access application on this hostname. Re-copy the AUD tag from Zero Trust, Access, Applications.
+The two values are present but do not match the Access application protecting this worker. Re-copy the AUD tag from the worker's Access tab in the Cloudflare dashboard.
 
 **Every enrichment says "Fields not set up in Growably"**
 Settings, Growably fields, Create missing fields.

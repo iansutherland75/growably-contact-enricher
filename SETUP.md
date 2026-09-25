@@ -14,7 +14,12 @@ Have these ready. Each takes a minute or two to find.
 
 **Apollo.io API key**
 
-In Apollo: Settings, Integrations, API. Create a key. Enrichment spends credits, so check your plan's credit allowance.
+1. Sign in at app.apollo.io. Open Settings (the gear icon, bottom left), then Integrations, then API Keys.
+2. Click Create new key and give it a name, such as "Contact Enricher".
+3. Apollo asks which endpoints the key may use. Tick two: People Enrichment (the `people/match` call, under People) and the auth Health check. Or turn on "Set as master key" to allow everything.
+4. Click Create and copy the key.
+
+Enrichment spends credits, and mobile numbers spend more, so check your plan's allowance under Settings, Plans and Billing.
 
 **Brave Search API key**
 
@@ -45,43 +50,44 @@ You will be asked for a `CONFIG_KEY`. Any 32 or more random characters will do. 
 
 Cloudflare Access puts a sign-in page in front of the app. It is free for up to 50 users.
 
-**2a. Enable Access on the app**
+**2a. Protect the worker**
 
 1. In the Cloudflare dashboard, go to Workers & Pages and open your worker.
-2. Open Settings, then Domains & Routes. On newer dashboards this is the Domains tab.
-3. Next to the `workers.dev` route, click Enable Cloudflare Access.
-4. The first time, Cloudflare asks you to set up Zero Trust. Choose a team name. It becomes your team domain, for example `acme-it.cloudflareaccess.com`. Pick the Free plan. Cloudflare asks for a payment method even on the Free plan; it is not charged.
-5. When asked who may sign in, allow only your own email address for now. You will widen this in step 7.
+2. Open the Access tab and click Protect this Worker behind Access.
+3. The first time, Cloudflare asks you to set up Zero Trust. Choose a team name. It becomes your team domain, for example `acme-it.cloudflareaccess.com`. Pick the Free plan. Cloudflare asks for a payment method even on the Free plan; it is not charged.
+4. In the dialog: Scope, choose All traffic. Authentication policy, open Add policy and choose Cloudflare account. That means only you (and anyone else who is a member of your Cloudflare account) can sign in during setup. You will widen this in step 7.
+5. Click Apply Access.
 
-**2b. Copy the two values the worker needs**
+The Access tab now shows a box called Application values with two entries: the AUD tag and a JWKS URL. Leave this page open.
 
-1. Team domain: in Zero Trust, go to Settings, then Custom Pages. Copy the team domain. It ends in `.cloudflareaccess.com`.
-2. Audience tag: in Zero Trust, go to Access, then Applications. Open the application named after your worker. On its overview, copy the Application Audience (AUD) Tag. It is a 64-character string.
+**2b. Give the two values to the worker**
 
-**2c. Give them to the worker**
-
-1. Back in Workers & Pages, open your worker, then Settings, then Variables and Secrets.
-2. Edit `ACCESS_TEAM_DOMAIN` and paste the team domain.
-3. Edit `ACCESS_APP_AUD` and paste the audience tag.
+1. Open the Settings tab, then Variables and Secrets.
+2. Edit `ACCESS_APP_AUD`. Paste the AUD tag from the Access tab. It is a 64-character string.
+3. Edit `ACCESS_TEAM_DOMAIN`. Paste the JWKS URL from the Access tab. The worker keeps only the host part, so `https://acme-it.cloudflareaccess.com/cdn-cgi/access/certs` and `acme-it.cloudflareaccess.com` both work.
 4. Save. Cloudflare redeploys the worker on its own.
 
-**2d. Let Apollo's phone webhook through**
+**2c. Let Apollo's phone webhook through**
 
-Apollo sends mobile numbers to the app a minute or two after each enrichment. It cannot sign in, so one address needs a hole in the sign-in wall. This is safe: that address checks its own secret token.
+Apollo sends mobile numbers to the app a minute or two after each enrichment. It cannot sign in, so one address needs a gap in the sign-in wall. This is safe: that address checks its own secret token, and a hostname rule beats the worker rule, which is why this works.
 
-1. In Zero Trust, go to Access, then Applications, then Add an application, then Self-hosted.
-2. Name it "Contact Enricher webhook".
-3. Under the application domain, enter your worker's hostname (for example `growably-contact-enricher.YOURNAME.workers.dev`) and the path `api/apollo-webhook`.
-4. Add a policy. Name it "Apollo". Set the action to Bypass. Under Include, choose Everyone.
-5. Save the application.
+1. In the Cloudflare dashboard, go to Zero Trust, then Access controls, then Applications, then Create new application.
+2. Keep Self-hosted and private selected and click Continue with Self-hosted and private.
+3. Under Public hostnames, click Switch to custom input. In the single box that appears, enter your worker's hostname followed by the path, for example `growably-contact-enricher.YOURNAME.workers.dev/api/apollo-webhook`.
+4. Scroll to Access policies and click Create new policy. Policy Name: `Apollo webhook bypass`. Under Include, set the selector to Everyone. Under Action, choose Bypass. Click Save policy.
+5. Scroll to the bottom. The Name is filled in for you. Click Create.
+
+**2d. Check it**
+
+Open your app's address in a private browser window. You should be sent to a Cloudflare sign-in page. That is Access doing its job. Close the window; the next step signs you in properly.
 
 **2e. Sign in with Microsoft 365**
 
 By default Access offers a one-time PIN by email. To sign in with Microsoft 365 accounts instead:
 
-1. In Zero Trust, go to Settings, then Authentication, then Login methods, then Add new, then Azure AD.
+1. In Zero Trust, go to Team & Resources, then Authentication, then Login methods, then Add new, then Azure AD.
 2. Follow Cloudflare's guide, which walks through creating an app registration in Microsoft Entra: https://developers.cloudflare.com/cloudflare-one/integrations/identity-providers/entra-id/
-3. Back in Access, open your worker's application, then Authentication, and select only Azure AD.
+3. Back in Zero Trust, open Access controls, Applications, the application named after your worker, then Authentication, and select only Azure AD.
 
 You can do this step later. One-time PIN works fine for the rest of setup.
 
@@ -126,16 +132,16 @@ A "Mobile: arriving" tag means Apollo is still looking up the number. It lands o
 
 ## Step 7: Let your team in
 
-1. In Zero Trust, go to Access, then Applications, open your worker's application, then Policies.
-2. Edit the Allow policy. Change the Include rule from your email address to Emails ending in `@yourdomain.com`.
-3. Anyone at your domain can now sign in. They start as a User: Add Contact and Enrich Contact only.
-4. To make someone an administrator, open Settings, then User Management, and change their role. You can also add them before they first sign in.
+1. In Workers & Pages, open your worker, then the Access tab, then Manage access.
+2. Remove the Cloudflare account policy. Open Add policy, choose Email domain, and enter the domain your team signs in with, for example `yourmsp.com`. Use the domain of your Microsoft 365 email addresses. If your website lives on a different domain, that one will not work here: you will see "That account does not have access" at sign-in. Apply Access.
+3. Anyone with a verified email at your domain can now sign in. They start as a User: Add Contact and Enrich Contact only.
+4. To make someone an administrator, open Settings in the app, then User Management, and change their role. You can also add them before they first sign in.
 
 ## Optional
 
 **Bulk enrichment** needs the Workers Paid plan. In the Cloudflare dashboard, go to Workers & Pages, then Plans, and upgrade. Then redeploy once (Workers & Pages, your worker, Deployments, Retry the latest deployment) so the new limits apply. On the Free plan each bulk batch stops after two or three contacts.
 
-**Custom domain.** If your domain is on Cloudflare, open your worker's Domains tab and add a hostname such as `enrich.yourdomain.com`. Then repeat step 2 for that hostname: enable Access on it, create the webhook bypass for it, and update `ACCESS_APP_AUD` if Cloudflare created a new Access application.
+**Custom domain.** If your domain is on Cloudflare, open your worker's Domains tab and add a hostname such as `enrich.yourdomain.com`. The worker-level Access rule from step 2a covers the new hostname too. Add a second webhook bypass application (step 2c) for `enrich.yourdomain.com/api/apollo-webhook`, then sign in once on the new address so the app learns it.
 
 **Updates.** The Deploy button made a copy of this project in your GitHub account. To take changes from the original, compare the two repositories on GitHub and copy the files that changed. Pushing to your repository's main branch redeploys automatically.
 

@@ -57,7 +57,8 @@ async function postJson(url, headers, body, label, { attempts = 3, retryBudgetMs
     const text = await res.text();
     lastErr = new Error(describeFailure(label, res.status, text));
     console.warn(`[ai] attempt ${i + 1} failed: ${lastErr.message}`);
-    if (!RETRY_STATUSES.has(res.status)) throw lastErr;
+    // A 429 for "no credits" is not transient; retrying only burns time.
+    if (!RETRY_STATUSES.has(res.status) || /insufficient_quota|credit balance|billing/i.test(text)) throw lastErr;
   }
   throw lastErr;
 }
@@ -66,6 +67,7 @@ function describeFailure(label, status, text) {
   const snippet = text.slice(0, 200);
   if (status === 401 || status === 403) return `${label}: ${status}. The API key was rejected. Check it in Settings.`;
   if (status === 404 && /model/i.test(text)) return `${label}: 404. The model was not found. Check the model name in Settings.`;
+  if (/insufficient_quota|credit balance|billing/i.test(text)) return `${label}: the account has no credits. Add credits in the provider's billing settings, then try again.`;
   return `${label}: ${status}: ${snippet}`;
 }
 

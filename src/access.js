@@ -16,8 +16,10 @@
  *                        (Zero Trust -> Access -> Applications -> your app -> Overview)
  */
 
+// Accepts the bare team domain or the full JWKS URL the dashboard shows
+// (https://team.cloudflareaccess.com/cdn-cgi/access/certs); only the host is kept.
 function clean(v) {
-  return typeof v === 'string' ? v.trim().replace(/^https?:\/\//, '').replace(/\/+$/, '') : '';
+  return typeof v === 'string' ? v.trim().replace(/^https?:\/\//, '').split('/')[0] : '';
 }
 
 // A team domain is <team>.cloudflareaccess.com; an AUD tag is 64 hex characters.

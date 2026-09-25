@@ -222,7 +222,13 @@ const SERVICES = [
   },
   {
     id: 'apollo', label: 'Apollo.io', desc: 'Person and company data, mobile numbers',
-    help: 'Apollo: Settings, Integrations, API. Enrichment spends Apollo credits.',
+    help: [
+      'Sign in at app.apollo.io. Open Settings (the gear icon, bottom left), then Integrations, then API Keys.',
+      'Click Create new key and give it a name, such as Contact Enricher.',
+      'Apollo asks which endpoints the key may use. Tick People Enrichment (the people/match call, under People) and the auth Health check. Or turn on Set as master key to allow everything.',
+      'Click Create, copy the key, paste it below, then click Test.',
+    ],
+    note: 'Every enrichment spends Apollo credits, and mobile numbers spend more. Check your plan\'s allowance in Apollo under Settings, Plans and Billing.',
     fields: [{ key: 'apolloApiKey', label: 'API key', secret: true }],
   },
   {
@@ -240,6 +246,14 @@ const SERVICES = [
     ],
   },
 ];
+
+/** Help block for a service: numbered steps when `help` is a list, one line otherwise, plus an optional note. */
+function helpHtml(svc) {
+  const steps = Array.isArray(svc.help)
+    ? `<ol class="form-steps">${svc.help.map(s => `<li>${esc(s)}</li>`).join('')}</ol>`
+    : `<p class="form-hint">${esc(svc.help)}</p>`;
+  return steps + (svc.note ? `<p class="form-hint">${esc(svc.note)}</p>` : '');
+}
 
 /** Provider options for the AI select, from /api/config. */
 function providerOptions(selected) {
@@ -326,7 +340,7 @@ function showSetupScreen(cfg) {
   services.innerHTML = SERVICES.map(svc => `
     <fieldset class="setup-section" data-service="${svc.id}">
       <legend>${esc(svc.label)}${svc.id === 'ai' ? ' <span class="optional-label">optional</span>' : ''}</legend>
-      <p class="form-hint">${esc(svc.help)}</p>
+      ${helpHtml(svc)}
       <div class="form-grid">${serviceInputsHtml(svc, 'setup')}</div>
       <div class="test-row">
         <button type="button" class="btn btn-secondary btn-sm" data-test="${svc.id}">Test</button>
@@ -382,10 +396,10 @@ function showAccessScreen(kind) {
     body.innerHTML = `
       <p class="page-desc">The worker is running, but it does not know which Cloudflare Access application protects it. This is step 3 of SETUP.md.</p>
       <ol class="setup-steps">
-        <li>In Cloudflare Zero Trust, create a self-hosted Access application for <code>${esc(host)}</code> with an Allow policy for your email domain.</li>
-        <li>Create a second application for <code>${esc(host)}/api/apollo-webhook</code> with a Bypass policy for Everyone.</li>
-        <li>Copy the first application's <em>Application Audience (AUD) tag</em> and your <em>team domain</em>.</li>
-        <li>In the worker's <em>Settings</em>, <em>Variables and Secrets</em>, add two secrets: <code>ACCESS_TEAM_DOMAIN</code> and <code>ACCESS_APP_AUD</code>.</li>
+        <li>In the Cloudflare dashboard, open this worker, then the <em>Access</em> tab, and click <em>Protect this Worker behind Access</em>. Scope: All traffic. Policy: Cloudflare account.</li>
+        <li>The Access tab then shows <em>Application values</em>: an AUD tag and a JWKS URL.</li>
+        <li>In the worker's <em>Settings</em>, <em>Variables and Secrets</em>, set <code>ACCESS_APP_AUD</code> to the AUD tag and <code>ACCESS_TEAM_DOMAIN</code> to the JWKS URL.</li>
+        <li>In Zero Trust, create a self-hosted application for <code>${esc(host)}/api/apollo-webhook</code> with a Bypass policy for Everyone (SETUP.md step 2c).</li>
         <li>Wait a minute, then reload this page. You will be asked to sign in.</li>
       </ol>`;
   } else {
@@ -473,7 +487,7 @@ function startIntegrationEdit(svcId) {
   row.innerHTML = `
     <td colspan="4" class="edit-cell">
       <div class="td-field-name">${esc(svc.label)}</div>
-      <p class="form-hint">${esc(svc.help)}</p>
+      ${helpHtml(svc)}
       <div class="form-grid" data-service="${svcId}">${serviceInputsHtml(svc, 'settings', prefill)}</div>
       <div class="test-row">
         <button type="button" class="btn btn-secondary btn-sm" data-test="${svcId}">Test</button>

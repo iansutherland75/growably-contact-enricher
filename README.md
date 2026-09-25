@@ -46,7 +46,7 @@ Three ways to run it:
 
 ## How it works
 
-One Cloudflare Worker serves the web app and the API. Cloudflare Access sits in front of it, so nobody reaches the page without signing in, and the worker checks the signed-in identity again on every request.
+One Cloudflare Worker serves the web app and the API. Cloudflare Access sits in front of it (one click on the worker's Access tab), so nobody reaches the page without signing in, and the worker checks the signed-in identity again on every request.
 
 Out of the box it uses Growably's own palette: orange for buttons and the active menu item, blue for links and labels, navy for the sidebar. Administrators can swap in their own logo and colours under Settings.
 

@@ -458,13 +458,32 @@ function extractJobTitle(results, name) {
     if (!r.url?.includes('linkedin.com')) continue;
     const desc = r.description ?? r.title ?? '';
     const m = desc.match(/[-–|]\s*([A-Z][^|–\-]{3,50}?)\s*(?:at|@|\||–|-)/);
-    if (m) return m[1].trim();
+    if (m && plausibleTitle(m[1])) return m[1].trim();
     const lastName = name.split(' ').pop();
     const m2 = desc.match(new RegExp(`${lastName}[,.]?\\s*[-–]?\\s*([A-Z][^|.]{3,50})`, 'i'));
-    if (m2) return m2[1].trim();
+    if (m2 && plausibleTitle(m2[1])) return m2[1].trim();
   }
   return null;
 }
+
+/**
+ * Reject snippet fragments that are not job titles: too short, not starting
+ * with a capital, or a stray word like "embers" cut out of "Members".
+ */
+function plausibleTitle(raw) {
+  const t = String(raw ?? '').trim();
+  if (t.length < 4 || !/^[A-Z]/.test(t)) return false;
+  if (!/[a-z]/.test(t)) return false;                 // all caps fragments
+  if (/^(members?|people|connections?|followers?|profile|view|see|more|about)\b/i.test(t)) return false;
+  return true;
+}
+
+/**
+ * Names shorter than this cannot anchor a search-result match. "Tasha M"
+ * would let almost any LinkedIn slug or Twitter handle through, so search
+ * fallbacks are skipped for such contacts and only Apollo's own data is used.
+ */
+const MIN_LAST_NAME = 3;
 
 // ─── Apollo enrichment ───────────────────────────────────────────────────────
 
@@ -801,7 +820,9 @@ export async function enrichContact(contact, env) {
   // ── 2. LinkedIn + job title (Brave fallback if Apollo had no record) ─────
   // extractLinkedIn validates the URL slug contains the last name, preventing
   // mismatched profiles from being written (see function comment for details).
-  if (!apollo?.linkedinUrl) {
+  // A last name too short to validate against means no search fallback at all.
+  const nameIsSearchable = lastName.length >= MIN_LAST_NAME;
+  if (!apollo?.linkedinUrl && nameIsSearchable) {
     try {
       const r = await braveSearch(`"${name}" ${company || domain} LinkedIn`, env);
       const li = extractLinkedIn(r, lastName);
@@ -820,14 +841,20 @@ export async function enrichContact(contact, env) {
   }
 
   // ── 3. Twitter / X ──────────────────────────────────────────────────────
-  try {
-    const r = await braveSearch(`"${name}" ${company || domain} twitter.com OR x.com`, env);
-    const tw = extractTwitter(r);
-    if (tw) {
-      found.twitter = tw;
-      setField('twitter', tw);
-    }
-  } catch (e) { errors.push(`Twitter: ${e.message}`); }
+  // The handle must contain the last name (letters and digits only). Weaker
+  // than the LinkedIn check but it stops obvious strangers.
+  if (nameIsSearchable) {
+    try {
+      const r = await braveSearch(`"${name}" ${company || domain} twitter.com OR x.com`, env);
+      const tw = extractTwitter(r);
+      const fragment = lastName.toLowerCase().replace(/[^a-z0-9]/g, '');
+      const handle = tw ? (new URL(tw).pathname.split('/').filter(Boolean)[0] ?? '').toLowerCase().replace(/[^a-z0-9]/g, '') : '';
+      if (tw && fragment && handle.includes(fragment)) {
+        found.twitter = tw;
+        setField('twitter', tw);
+      }
+    } catch (e) { errors.push(`Twitter: ${e.message}`); }
+  }
 
   // ── 4. Company enrichment ────────────────────────────────────────────────
   // Website scrape is primary; Brave search fills gaps if scrape is incomplete.
@@ -885,6 +912,8 @@ export async function enrichContact(contact, env) {
   }
 
   await ghlPut(`/contacts/${contact.id}`, updates, env);
+  console.log(`[enrich] ${contact.id} found=${Object.keys(found).join(',') || 'nothing'} ` +
+    `suggested=${Object.keys(suggested).join(',') || 'none'} errors=${errors.length}`);
   return { contactId: contact.id, name, found, suggested, errors, missingFields: [...missingFields] };
 }
 
