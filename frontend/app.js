@@ -1153,7 +1153,7 @@ function renderLinkValue(value) {
  * the current value (or em-dash if empty).
  *
  * Cells with a new enriched value highlight in green with a "via web search" source note.
- * Special renderers apply for link fields (renderLinkValue) and email status (renderEmailStatus).
+ * Link fields render through renderLinkValue.
  */
 /**
  * Holds the most recent enrichment delta for the selected contact, so Apply
