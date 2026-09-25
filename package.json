@@ -1,0 +1,33 @@
+{
+  "name": "growably-contact-enricher",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Enrich Growably (GoHighLevel) contacts with Apollo.io, Brave Search and website data, plus AI pre-meeting briefs. Runs on Cloudflare Workers.",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "for f in src/*.js; do node --check \"$f\" || exit 1; done && wrangler deploy --dry-run"
+  },
+  "dependencies": {
+    "hono": "^4.6.0"
+  },
+  "devDependencies": {
+    "wrangler": "^4.85.0"
+  },
+  "cloudflare": {
+    "label": "Growably Contact Enricher",
+    "products": ["Workers", "KV"],
+    "categories": ["starter"],
+    "bindings": {
+      "CONFIG_KEY": {
+        "description": "Any long random string, 32 or more characters. A password manager's generator is fine. It encrypts the API keys the app stores. Keep a copy somewhere safe."
+      },
+      "ACCESS_TEAM_DOMAIN": {
+        "description": "Leave as-is for now. After deploying you will set up Cloudflare Access and come back to fill this in (SETUP.md step 3)."
+      },
+      "ACCESS_APP_AUD": {
+        "description": "Leave as-is for now. Filled in after Cloudflare Access is set up (SETUP.md step 3)."
+      }
+    }
+  }
+}

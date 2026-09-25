@@ -1,0 +1,51 @@
+name = "growably-contact-enricher"
+main = "src/index.js"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# The app runs on the workers.dev hostname. Cloudflare Access sits on that
+# hostname (see SETUP.md). No custom domain is needed.
+workers_dev = true
+
+# Values set in the Cloudflare dashboard (Settings -> Variables and Secrets)
+# survive redeploys. Nothing in this file overrides them.
+keep_vars = true
+
+# The frontend is served by this worker as static assets, same origin as the API.
+[assets]
+directory = "./frontend"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+# Optional custom domain. Needs a zone on this Cloudflare account. If you use
+# one, put the Access applications on this hostname instead of workers.dev.
+# [[routes]]
+# pattern = "enrich.yourdomain.com"
+# custom_domain = true
+
+# No id here on purpose: Cloudflare creates the namespace on first deploy,
+# whether that deploy comes from the Deploy button, Workers Builds, or wrangler.
+[[kv_namespaces]]
+binding = "ENRICH_KV"
+
+# Bulk enrichment runs one batch every 5 minutes.
+[triggers]
+crons = ["*/5 * * * *"]
+
+# Keep 7 days of logs in the dashboard (Workers & Pages -> your worker -> Logs).
+[observability]
+enabled = true
+
+# Secrets (dashboard: Settings -> Variables and Secrets -> Add -> Secret,
+# or from a terminal: npx wrangler secret put <NAME>). See .dev.vars.example
+# for the list. The three that matter:
+#
+#   CONFIG_KEY          Any long random string (32+ characters). Encrypts the
+#                       API keys the app stores and derives the Apollo webhook
+#                       token. Losing it means re-entering keys in Settings.
+#   ACCESS_TEAM_DOMAIN  yourteam.cloudflareaccess.com
+#   ACCESS_APP_AUD      Application Audience (AUD) tag of your Access app
+#
+# Everything else (Growably token and location, Apollo, Brave, AI provider and
+# key, administrators, branding) is entered in the browser on first sign-in and
+# stored encrypted in KV.

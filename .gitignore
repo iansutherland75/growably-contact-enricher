@@ -1,0 +1,19 @@
+# Node / Cloudflare Worker
+node_modules/
+.wrangler/
+dist/
+
+# Secrets and local dev config (never commit real values)
+.dev.vars
+.env
+.env.*
+*.pem
+*.key
+
+# Claude local (machine-specific)
+.claude/settings.local.json
+
+# Logs and OS
+*.log
+.DS_Store
+.claude/

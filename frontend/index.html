@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lead Enrichment</title>
+  <link id="favicon" rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23005488'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- Shown when Cloudflare Access is not configured yet (SETUP.md step 3) -->
+  <div id="access-screen" class="fullscreen hidden">
+    <div class="setup-card">
+      <div class="section-eyebrow">Almost there</div>
+      <h1 id="access-title">Sign-in is not set up yet</h1>
+      <div id="access-body"></div>
+    </div>
+  </div>
+
+  <!-- First-run setup: choose administrators, connect services -->
+  <div id="setup-screen" class="fullscreen hidden">
+    <div class="setup-card setup-card-wide">
+      <div class="section-eyebrow">First-time setup</div>
+      <h1 id="setup-title">Set up Lead Enrichment</h1>
+      <p class="page-desc">You are the first person to sign in. Choose who administers this tool and connect the services it uses. Everything here can be changed later under Settings.</p>
+
+      <div id="setup-nokey" class="notice notice-warn hidden">
+        <strong>One thing first.</strong> The <code>CONFIG_KEY</code> secret is not set, so API keys cannot be stored yet.
+        In Cloudflare, open your worker, then <em>Settings</em>, then <em>Variables and Secrets</em>, choose <em>Add</em>, set the type to <em>Secret</em>, name it <code>CONFIG_KEY</code>, and paste this value:
+        <div class="keyline"><code id="setup-generated-key"></code><button type="button" class="btn btn-secondary btn-sm" id="setup-copy-key">Copy</button></div>
+        Save, wait about a minute, then reload this page. You can still choose administrators below in the meantime.
+      </div>
+
+      <form id="setup-form" autocomplete="off">
+        <fieldset class="setup-section">
+          <legend>Administrators</legend>
+          <p class="form-hint">Administrators can run bulk enrichment and manage users, API keys, fields and branding. One email address per line. Yours is filled in.</p>
+          <textarea id="setup-admins" class="text-area" rows="3" spellcheck="false"></textarea>
+        </fieldset>
+
+        <div id="setup-services"></div>
+
+        <fieldset class="setup-section">
+          <legend>Name this tool <span class="optional-label">optional</span></legend>
+          <input id="setup-app-name" class="text-input plain" maxlength="60" placeholder="Lead Enrichment" />
+          <p class="form-hint">Logo and colour can be added later under Settings.</p>
+        </fieldset>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary btn-lg" id="setup-submit">Finish setup</button>
+          <span id="setup-error" class="form-error"></span>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="app-shell" id="app-shell">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-logo" id="logo-home" role="button" tabindex="0" aria-label="Go to home">
+        <img id="brand-logo" class="brand-logo hidden" alt="" />
+        <div id="brand-mark" class="brand-mark" aria-hidden="true">L</div>
+        <span id="brand-name" class="brand-name">Lead Enrichment</span>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item" data-view="add">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+          </svg>
+          Add Contact
+        </button>
+        <button class="nav-item active" data-view="single">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+          </svg>
+          Enrich Contact
+        </button>
+        <!-- Administrators only -->
+        <button class="nav-item hidden" id="nav-bulk" data-view="bulk">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+          Bulk Enrich
+        </button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div id="profile-card" class="profile-card hidden">
+          <div class="profile-avatar-wrap">
+            <div id="profile-initials" class="profile-initials"></div>
+          </div>
+          <div class="profile-info">
+            <div id="profile-name" class="profile-name"></div>
+            <div id="profile-email" class="profile-email"></div>
+          </div>
+          <button id="profile-menu-btn" class="profile-menu-btn" aria-label="Account options">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <circle cx="5" cy="12" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="19" cy="12" r="2"/>
+            </svg>
+          </button>
+        </div>
+
+        <div id="profile-dropdown" class="profile-dropdown hidden">
+          <button id="logout-btn" class="profile-dropdown-item">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+              <polyline points="16 17 21 12 16 7"/>
+              <line x1="21" y1="12" x2="9" y2="12"/>
+            </svg>
+            Log out
+          </button>
+        </div>
+
+        <div class="sidebar-divider"></div>
+
+        <button class="nav-item" data-view="settings">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          Settings
+        </button>
+      </div>
+    </aside>
+
+    <!-- Top bar -->
+    <div class="topbar">
+      <div class="topbar-title" id="topbar-title">Enrich Contact</div>
+      <div class="sync-indicator">
+        <span class="sync-dot" id="sync-dot"></span>
+        <span class="sync-label" id="sync-label">Connected to Growably</span>
+      </div>
+    </div>
+
+    <!-- Main content -->
+    <main class="main-content">
+
+      <!-- Administrators see this until the Growably fields exist -->
+      <div id="fields-banner" class="notice notice-warn hidden">
+        <span id="fields-banner-text">Some Growably fields are missing, so parts of each enrichment cannot be saved.</span>
+        <button type="button" class="btn btn-secondary btn-sm" id="fields-banner-btn">Open Settings</button>
+      </div>
+
+      <!-- Administrators see this until Growably is connected -->
+      <div id="ghl-banner" class="notice notice-warn hidden">
+        <span>Growably is not connected yet. Add the token and location ID under Settings.</span>
+        <button type="button" class="btn btn-secondary btn-sm" id="ghl-banner-btn">Open Settings</button>
+      </div>
+
+      <!-- Add Contact -->
+      <section id="view-add" class="view">
+        <div class="page-header">
+          <h1>Add Contact</h1>
+          <p class="page-desc">Enter an email address to create a new contact in Growably and enrich it automatically.</p>
+        </div>
+
+        <div class="search-row">
+          <div class="input-wrap">
+            <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+            </svg>
+            <input type="email" id="add-contact-email" class="text-input" placeholder="email@company.com" autocomplete="off" />
+          </div>
+          <button id="add-contact-btn" class="btn btn-primary">Add &amp; Enrich</button>
+        </div>
+
+        <div id="add-contact-result" class="card hidden" style="padding: 24px;">
+          <div id="add-contact-result-inner"></div>
+        </div>
+      </section>
+
+      <!-- Enrich Contact -->
+      <section id="view-single" class="view active">
+        <div class="page-header">
+          <h1>Enrich a Contact</h1>
+          <p class="page-desc">Search by name or email. Select a contact to preview and enrich their record in Growably.</p>
+        </div>
+
+        <div class="search-row">
+          <div class="input-wrap">
+            <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+            </svg>
+            <input type="text" id="search-input" class="text-input" placeholder="Search by name or email" autocomplete="off" />
+          </div>
+          <button id="search-btn" class="btn btn-primary">Search</button>
+        </div>
+
+        <div id="search-results" class="results-list hidden"></div>
+
+        <div id="contact-panel" class="card hidden">
+          <div class="contact-header">
+            <div class="contact-avatar" id="contact-avatar"></div>
+            <div class="contact-header-info">
+              <h2 id="contact-name" class="contact-name"></h2>
+              <p id="contact-id" class="contact-id"></p>
+            </div>
+            <div id="contact-status-pill" class="status-pill"></div>
+            <button id="enrich-btn" class="btn btn-primary btn-lg">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="23 4 23 10 17 10"/>
+                <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+              </svg>
+              Enrich now
+            </button>
+            <button id="nurture-btn" class="btn btn-secondary btn-lg">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+              Nurture
+            </button>
+            <button id="brief-btn" class="btn btn-secondary btn-lg">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+                <polyline points="10 9 9 9 8 9"/>
+              </svg>
+              Generate Brief
+            </button>
+          </div>
+
+          <div id="fields-section" class="fields-section">
+            <div class="section-eyebrow">Contact Fields</div>
+            <table class="fields-table" id="fields-table">
+              <thead>
+                <tr>
+                  <th>Field</th>
+                  <th>Current value</th>
+                  <th>Enriched value</th>
+                </tr>
+              </thead>
+              <tbody id="fields-tbody"></tbody>
+            </table>
+          </div>
+
+          <div class="brief-options">
+            <div class="section-eyebrow">Brief Options</div>
+            <p id="brief-hint" class="form-hint brief-hint hidden"></p>
+            <div class="brief-options-grid">
+              <div class="brief-field">
+                <label class="brief-label" for="brief-date">Meeting date</label>
+                <input type="date" id="brief-date" class="text-input brief-input" />
+              </div>
+              <div class="brief-field">
+                <label class="brief-label" for="brief-stage">Meeting stage</label>
+                <select id="brief-stage" class="text-input brief-input">
+                  <option value="first meeting">First meeting</option>
+                  <option value="follow-up">Follow-up</option>
+                  <option value="proposal">Proposal</option>
+                </select>
+              </div>
+              <div class="brief-field brief-field-wide">
+                <label class="brief-label" for="brief-focus">Focus notes <span class="optional-label">optional</span></label>
+                <input type="text" id="brief-focus" class="text-input brief-input" placeholder="e.g. They mentioned a compliance audit last month" />
+              </div>
+            </div>
+          </div>
+
+          <div id="enrich-result" class="enrich-result hidden"></div>
+        </div>
+      </section>
+
+      <!-- Bulk Enrich -->
+      <section id="view-bulk" class="view">
+        <div class="page-header">
+          <h1>Bulk Enrich Contacts</h1>
+          <p class="page-desc">Enrich a batch of Growably contacts automatically. Runs in batches every 5 minutes. Safe to close this tab.</p>
+        </div>
+
+        <div class="card bulk-card">
+          <div class="section-eyebrow">Scope</div>
+
+          <div class="bulk-scope" id="bulk-scope">
+            <label class="scope-option">
+              <input type="radio" name="bulk-scope" value="all" checked>
+              <span class="scope-label">All contacts</span>
+            </label>
+            <label class="scope-option">
+              <input type="radio" name="bulk-scope" value="since">
+              <span class="scope-label">Created since</span>
+              <input type="date" id="bulk-since-date" class="text-input scope-input" disabled>
+            </label>
+            <label class="scope-option">
+              <input type="radio" name="bulk-scope" value="tag">
+              <span class="scope-label">With tag</span>
+              <input type="text" id="bulk-tag-input" class="text-input scope-input" placeholder="e.g. trade-show-2026" disabled>
+            </label>
+          </div>
+
+          <div class="section-eyebrow">Progress</div>
+
+          <div class="stats-row">
+            <div class="stat-block">
+              <span class="stat-value" id="stat-processed">—</span>
+              <span class="stat-label">Processed</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-block">
+              <span class="stat-value" id="stat-succeeded">—</span>
+              <span class="stat-label">Succeeded</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-block">
+              <span class="stat-value" id="stat-failed">—</span>
+              <span class="stat-label">Failed</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-block">
+              <span class="stat-value" id="stat-total">—</span>
+              <span class="stat-label">Total contacts</span>
+            </div>
+          </div>
+
+          <div class="progress-block">
+            <div class="progress-track">
+              <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+            </div>
+            <span class="progress-caption" id="progress-label">Not started</span>
+          </div>
+
+          <div class="bulk-actions">
+            <button id="bulk-start-btn" class="btn btn-primary btn-lg">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+              Start bulk enrichment
+            </button>
+            <button id="bulk-pause-btn" class="btn btn-secondary hidden">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/>
+              </svg>
+              Pause
+            </button>
+          </div>
+
+          <p class="bulk-status-note" id="bulk-status-note"></p>
+          <p class="form-hint">Bulk enrichment needs the Cloudflare Workers Paid plan. On the Free plan each batch stops after two or three contacts.</p>
+        </div>
+      </section>
+
+      <!-- Settings -->
+      <section id="view-settings" class="view">
+        <div class="page-header">
+          <h1>Settings</h1>
+          <p class="page-desc">Preferences, and for administrators, everything that connects this tool to your services.</p>
+        </div>
+
+        <div class="card settings-card">
+          <div class="section-eyebrow">Appearance</div>
+          <div class="settings-row">
+            <div class="settings-row-info">
+              <div class="settings-row-label">Dark mode</div>
+              <div class="settings-row-desc">Switch between light and dark interface</div>
+            </div>
+            <button class="toggle-switch" id="dark-mode-toggle" role="switch" aria-checked="false" aria-label="Toggle dark mode">
+              <span class="toggle-thumb"></span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Branding (administrators) -->
+        <div class="card settings-card admin-only hidden" id="branding-card">
+          <div class="section-eyebrow">Branding</div>
+          <p class="settings-desc">Shown in the sidebar, the browser tab and the header of every brief.</p>
+          <div class="form-grid">
+            <label class="form-field">
+              <span class="form-label">App name</span>
+              <input id="brand-app-name" class="text-input plain" maxlength="60" />
+            </label>
+            <label class="form-field">
+              <span class="form-label">Brand colour</span>
+              <span class="color-row">
+                <input type="color" id="brand-color" aria-label="Brand colour picker" />
+                <input id="brand-color-hex" class="text-input plain mono" maxlength="7" placeholder="#005488" />
+              </span>
+            </label>
+            <div class="form-field form-field-wide">
+              <span class="form-label">Logo</span>
+              <div class="logo-row">
+                <img id="brand-logo-preview" class="logo-preview hidden" alt="Logo preview" />
+                <input type="file" id="brand-logo-file" accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml" />
+                <button type="button" class="btn btn-secondary btn-sm" id="brand-logo-remove">Remove logo</button>
+              </div>
+              <span class="form-hint">PNG, JPEG, WebP, GIF or SVG under 300 KB. Wide logos fit the sidebar best.</span>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn btn-primary" id="brand-save">Save branding</button>
+          </div>
+        </div>
+
+        <!-- Integrations (administrators) -->
+        <div class="card settings-card settings-card-wide admin-only hidden" id="integrations-card">
+          <div class="section-eyebrow">Integrations</div>
+          <p class="settings-desc">Keys are stored encrypted and never shown in full after saving. Leave a key blank when editing to keep the current one.</p>
+          <div id="integrations-nokey" class="notice notice-warn hidden">
+            The <code>CONFIG_KEY</code> secret is not set on this worker, so keys cannot be saved from here. See SETUP.md.
+          </div>
+          <table class="fields-table" id="integrations-table">
+            <thead>
+              <tr>
+                <th>Service</th>
+                <th>Status</th>
+                <th>Details</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="integrations-tbody">
+              <tr><td colspan="4" style="padding:12px;color:var(--color-gray-text)">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Growably fields (administrators) -->
+        <div class="card settings-card admin-only hidden" id="fields-card">
+          <div class="section-eyebrow">Growably fields</div>
+          <p class="settings-desc">The custom fields enrichment writes to. Anything missing can be created here in one click.</p>
+          <table class="fields-table" id="fields-status-table">
+            <thead>
+              <tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="fields-status-tbody">
+              <tr><td colspan="3" style="padding:12px;color:var(--color-gray-text)">Loading…</td></tr>
+            </tbody>
+          </table>
+          <div class="form-actions">
+            <button type="button" class="btn btn-primary" id="fields-create-btn">Create missing fields</button>
+            <button type="button" class="btn btn-secondary" id="fields-refresh-btn">Refresh</button>
+            <span id="fields-note" class="form-hint"></span>
+          </div>
+        </div>
+
+        <!-- Brief profile (administrators) -->
+        <div class="card settings-card admin-only hidden" id="profile-card-settings">
+          <div class="section-eyebrow">Brief profile</div>
+          <p class="settings-desc">Who the pre-meeting brief is written for. The AI uses this to suggest angles that fit your company.</p>
+          <div class="form-grid">
+            <label class="form-field">
+              <span class="form-label">Rep name</span>
+              <input id="bp-rep-name" class="text-input plain" placeholder="Jane Nguyen" />
+            </label>
+            <label class="form-field">
+              <span class="form-label">Company name</span>
+              <input id="bp-company-name" class="text-input plain" placeholder="Acme IT" />
+            </label>
+            <label class="form-field form-field-wide">
+              <span class="form-label">What the company does</span>
+              <input id="bp-company-desc" class="text-input plain" placeholder="Managed IT and security for professional firms in Ontario" />
+            </label>
+            <label class="form-field">
+              <span class="form-label">Region</span>
+              <input id="bp-region" class="text-input plain" placeholder="Ontario, Canada" />
+            </label>
+            <label class="form-field">
+              <span class="form-label">Timezone</span>
+              <input id="bp-timezone" class="text-input plain" placeholder="America/Toronto" />
+            </label>
+            <label class="form-field form-field-wide">
+              <span class="form-label">Differentiators <span class="optional-label">one per line</span></span>
+              <textarea id="bp-differentiators" class="text-area" rows="5" placeholder="No lock-in contracts, month to month&#10;Fixed monthly fee per user&#10;Microsoft partner with Copilot deployments"></textarea>
+            </label>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn btn-primary" id="bp-save">Save brief profile</button>
+          </div>
+        </div>
+
+        <!-- Users (administrators) -->
+        <div class="card settings-card admin-only hidden" id="users-card">
+          <div class="section-eyebrow">User Management</div>
+          <p class="settings-desc">Anyone allowed through Cloudflare Access can sign in and enrich single contacts. Administrators can also run bulk jobs and change these settings.</p>
+
+          <div class="add-user-row">
+            <input type="email" id="add-user-email" class="text-input plain" placeholder="email@yourmsp.com" />
+            <select id="add-user-role" class="text-input plain add-user-role-select">
+              <option value="user">User</option>
+              <option value="superuser">Administrator</option>
+            </select>
+            <button id="add-user-btn" class="btn btn-primary">Add</button>
+          </div>
+
+          <table class="fields-table" id="users-table">
+            <thead>
+              <tr>
+                <th>Email</th>
+                <th>Role</th>
+              </tr>
+            </thead>
+            <tbody id="users-tbody"></tbody>
+          </table>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Brief lightbox -->
+  <dialog id="brief-modal" class="brief-modal">
+    <div class="brief-modal-inner">
+      <header class="brief-modal-header">
+        <div>
+          <div class="section-eyebrow">Pre-meeting brief</div>
+          <h2 class="brief-modal-title" id="brief-modal-title">Sales brief</h2>
+        </div>
+        <div class="brief-modal-actions">
+          <button type="button" id="brief-modal-copy" class="btn btn-secondary">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+            </svg>
+            Copy
+          </button>
+          <button type="button" id="brief-modal-close" class="btn btn-secondary" aria-label="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+            Close
+          </button>
+        </div>
+      </header>
+      <pre class="brief-modal-body" id="brief-modal-body"></pre>
+    </div>
+  </dialog>
+
+  <div class="toast-container" id="toast-container"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

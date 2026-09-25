@@ -1,0 +1,33 @@
+# Secrets for this worker.
+#
+# Deploy to Cloudflare button: you are asked for these on the setup form.
+# Dashboard: Workers & Pages -> your worker -> Settings -> Variables and Secrets.
+# Terminal: copy this file to .dev.vars for local dev, and use
+#           `npx wrangler secret put NAME` for production.
+
+# Required. Any long random string (32+ characters). Encrypts the API keys the
+# app stores in KV and derives the Apollo webhook token.
+CONFIG_KEY=
+
+# Required after Cloudflare Access is set up (SETUP.md step 3).
+# Zero Trust -> Settings -> Custom Pages -> Team domain
+ACCESS_TEAM_DOMAIN=
+# Zero Trust -> Access -> Applications -> your app -> Overview -> Application Audience (AUD) Tag
+ACCESS_APP_AUD=
+
+# Optional. Normally entered in the app on first sign-in and stored encrypted.
+# Set here only if you prefer to manage them as secrets. Values entered in the
+# app take precedence.
+# GHL_API_KEY=
+# GHL_LOCATION_ID=
+# APOLLO_API_KEY=
+# BRAVE_API_KEY=
+# AI_PROVIDER=anthropic
+# AI_API_KEY=
+# AI_MODEL=
+# APOLLO_WEBHOOK_SECRET=
+# WORKER_URL=
+# ADMIN_EMAILS=
+
+# Local development only. Never set in production: it bypasses sign-in.
+# DEV_AUTH_EMAIL=you@yourmsp.com
