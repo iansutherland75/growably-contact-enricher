@@ -31,9 +31,10 @@ async function api(path, options = {}) {
     ...options,
     headers: { 'Content-Type': 'application/json', ...(options.headers ?? {}) },
   });
-  let data = null;
-  try { data = await res.json(); } catch { /* no body */ }
-  if (!res.ok) {
+  // A non-JSON answer (a sign-in page, a proxy error) is a failure even with a 200.
+  let data, json = true;
+  try { data = await res.json(); } catch { json = false; data = { error: `Unexpected answer from the server (HTTP ${res.status})` }; }
+  if (!res.ok || !json) {
     const err = new Error(data?.error ?? `HTTP ${res.status}`);
     err.status = res.status;
     err.data = data;
@@ -839,7 +840,8 @@ async function init() {
   applyStatusUi(cfg);
   document.getElementById('fields-banner-btn').addEventListener('click', goToSettings);
   document.getElementById('ghl-banner-btn').addEventListener('click', goToSettings);
-  pollBulkStatus();
+  // Bulk is for administrators; the Worker refuses its status to everyone else.
+  if (currentUserRole === 'superuser') pollBulkStatus();
 }
 
 init();
@@ -901,11 +903,11 @@ async function doAddContact() {
       inner.innerHTML = `
         <div style="display:flex;align-items:center;gap:12px">
           <div class="contact-avatar" style="width:40px;height:40px;font-size:15px">
-            ${((c.firstName?.[0] ?? '') + (c.lastName?.[0] ?? '')).toUpperCase() || c.email[0].toUpperCase()}
+            ${esc(((c.firstName?.[0] ?? '') + (c.lastName?.[0] ?? '')).toUpperCase() || c.email[0].toUpperCase())}
           </div>
           <div>
-            <div style="font-size:15px;font-weight:600;color:var(--color-black)">${name}</div>
-            <div style="font-size:12px;color:var(--color-gray-text);margin-top:2px">${c.email}</div>
+            <div style="font-size:15px;font-weight:600;color:var(--color-black)">${esc(name)}</div>
+            <div style="font-size:12px;color:var(--color-gray-text);margin-top:2px">${esc(c.email)}</div>
           </div>
           <span class="status-pill pill-partial" style="margin-left:auto">Already exists</span>
         </div>
@@ -977,11 +979,11 @@ async function doAddContact() {
     inner.innerHTML = `
       <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
         <div class="contact-avatar" style="width:40px;height:40px;font-size:15px">
-          ${((found.firstName?.[0] ?? '') + (found.lastName?.[0] ?? '')).toUpperCase() || email[0].toUpperCase()}
+          ${esc(((found.firstName?.[0] ?? '') + (found.lastName?.[0] ?? '')).toUpperCase() || email[0].toUpperCase())}
         </div>
         <div>
-          <div style="font-size:16px;font-weight:600;color:var(--color-black)">${name}</div>
-          <div style="font-family:var(--font-mono);font-size:11px;color:var(--color-gray-text)">${contact.id}</div>
+          <div style="font-size:16px;font-weight:600;color:var(--color-black)">${esc(name)}</div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:var(--color-gray-text)">${esc(contact.id)}</div>
         </div>
         <span class="status-pill pill-enriched" style="margin-left:auto">Created &amp; Enriched</span>
       </div>
@@ -990,13 +992,13 @@ async function doAddContact() {
         ${found.phonePending && !found.mobilePhone ? `<span class="tag-pending">Mobile: arriving</span>` : ''}
         ${missingKeys.map(k => `<span class="tag-missing">${FIELD_LABELS[k]} not found</span>`).join('')}
       </div>
-      ${result.errors?.length ? `<p style="margin-top:12px;font-size:12px;color:var(--color-gray-text)">Non-fatal errors: ${result.errors.join('; ')}</p>` : ''}`;
+      ${result.errors?.length ? `<p style="margin-top:12px;font-size:12px;color:var(--color-gray-text)">Non-fatal errors: ${esc(result.errors.join('; '))}</p>` : ''}`;
 
     resultEl.classList.remove('hidden');
     document.getElementById('add-contact-email').value = '';
     toast(`${name} added and enriched in Growably.`, 'success');
   } catch (e) {
-    inner.innerHTML = `<p style="color:var(--color-error);font-size:14px">${e.message}</p>`;
+    inner.innerHTML = `<p style="color:var(--color-error);font-size:14px">${esc(e.message)}</p>`;
     resultEl.classList.remove('hidden');
     toast(e.message, 'error');
   } finally {
@@ -1049,7 +1051,7 @@ function renderResults(contacts, error) {
   document.getElementById('contact-panel').classList.add('hidden');
 
   if (error) {
-    el.innerHTML = `<div class="empty-state" style="color:var(--color-error)">${error}</div>`;
+    el.innerHTML = `<div class="empty-state" style="color:var(--color-error)">${esc(error)}</div>`;
     el.classList.remove('hidden');
     return;
   }
@@ -1063,11 +1065,11 @@ function renderResults(contacts, error) {
   el.innerHTML = contacts.map(c => {
     const status = enrichStatus(c);
     return `
-      <div class="result-row" data-id="${c.id}" tabindex="0" role="button">
-        <div class="result-avatar">${initials(c)}</div>
+      <div class="result-row" data-id="${esc(c.id)}" tabindex="0" role="button">
+        <div class="result-avatar">${esc(initials(c))}</div>
         <div class="result-info">
-          <div class="result-name">${c.firstName ?? ''} ${c.lastName ?? ''}</div>
-          <div class="result-sub">${[c.email, c.companyName].filter(Boolean).join(' · ')}</div>
+          <div class="result-name">${esc(c.firstName ?? '')} ${esc(c.lastName ?? '')}</div>
+          <div class="result-sub">${esc([c.email, c.companyName].filter(Boolean).join(' · '))}</div>
         </div>
         <span class="status-pill ${status.cls}">${status.label}</span>
       </div>`;
@@ -1121,27 +1123,30 @@ const EXT_ICON = `<svg class="ext-link-icon" width="11" height="11" viewBox="0 0
  *   Other     → hostname + path (strips www.)
  */
 function renderLinkValue(value) {
-  try {
-    const u = new URL(value);
+  let u;
+  try { u = new URL(value); } catch { return esc(value); }
+  // Only web addresses become links: a javascript: or data: value stays plain text.
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') return esc(value);
+  // The host itself or a subdomain of it: dropbox.com is not x.com.
+  const on = (site) => u.hostname === site || u.hostname.endsWith(`.${site}`);
+  {
     let label = value;
-    if (u.hostname.includes('linkedin.com')) {
+    if (on('linkedin.com')) {
       const slug = u.pathname.split('/').filter(Boolean)[1];
       label = slug ? `linkedin.com/in/${slug}` : 'linkedin.com';
-    } else if (u.hostname.includes('twitter.com') || u.hostname.includes('x.com')) {
+    } else if (on('twitter.com') || on('x.com')) {
       const handle = u.pathname.split('/').filter(Boolean)[0];
       label = handle ? `@${handle}` : u.hostname;
-    } else if (u.hostname.includes('facebook.com')) {
+    } else if (on('facebook.com')) {
       const slug = u.pathname.split('/').filter(Boolean)[0];
       label = slug ? `facebook.com/${slug}` : 'facebook.com';
-    } else if (u.hostname.includes('instagram.com')) {
+    } else if (on('instagram.com')) {
       const slug = u.pathname.split('/').filter(Boolean)[0];
       label = slug ? `instagram.com/${slug}` : 'instagram.com';
     } else {
       label = u.hostname.replace(/^www\./, '') + (u.pathname !== '/' ? u.pathname : '');
     }
-    return `<a href="${value}" target="_blank" rel="noopener" class="link-value">${label}${EXT_ICON}</a>`;
-  } catch {
-    return `<a href="${value}" target="_blank" rel="noopener" class="link-value">${value}${EXT_ICON}</a>`;
+    return `<a href="${esc(u.href)}" target="_blank" rel="noopener" class="link-value">${esc(label)}${EXT_ICON}</a>`;
   }
 }
 
@@ -1168,7 +1173,9 @@ function renderFieldTable(contact, newValues, suggestedValues = {}) {
   tbody.innerHTML = fieldRows(contact).map(row => {
     const enriched = newValues[row.name];
     const current  = row.value;
-    const isNew    = enriched && enriched !== current;
+    // Written this run. Not compared with `current`: the contact is re-read from
+    // Growably after the run, so it already holds the new value.
+    const isNew    = Boolean(enriched);
 
     // Collect suggestions for this row (one row may map to multiple suggestion keys, e.g. Address)
     const applyKeys = row.applyKeys ?? [];
@@ -1180,7 +1187,7 @@ function renderFieldTable(contact, newValues, suggestedValues = {}) {
 
     const formatValue = (val) => {
       if (row.link)        return renderLinkValue(val);
-      return val;
+      return esc(val);
     };
 
     let currentCell = current
@@ -1200,6 +1207,7 @@ function renderFieldTable(contact, newValues, suggestedValues = {}) {
           rowSuggestions.postalCode ?? contact.postalCode,
           rowSuggestions.country    ?? contact.country,
         ].filter(Boolean).join(', ');
+        display = esc(display);
       } else {
         display = formatValue(Object.values(rowSuggestions)[0]);
       }
@@ -1220,7 +1228,7 @@ function renderFieldTable(contact, newValues, suggestedValues = {}) {
 
     return `
       <tr>
-        <td class="td-field-name">${row.name}</td>
+        <td class="td-field-name">${esc(row.name)}</td>
         <td>${currentCell}</td>
         <td>${enrichedCell}</td>
       </tr>`;
@@ -1242,10 +1250,17 @@ function renderFieldTable(contact, newValues, suggestedValues = {}) {
         const { success, error } = await res.json();
         if (!success) throw new Error(error ?? 'Unknown error');
 
-        // Refresh the contact from Growably so the table reflects what was actually written
-        const updated = await fetch(`${API_BASE}/api/contact/${selectedContact.id}`);
-        const { contact: refreshed } = await updated.json();
-        if (refreshed) selectedContact = refreshed;
+        // Refresh the contact from Growably so the table reflects what was actually written.
+        // The write already succeeded, so a failed re-read falls back to the values applied.
+        try {
+          const { contact: refreshed } = await api(`/api/contact/${selectedContact.id}`);
+          if (!refreshed) throw new Error('no contact');
+          selectedContact = refreshed;
+        } catch {
+          const applied = { ...fields };
+          if ('companyPhone' in applied) { applied.phone = applied.companyPhone; delete applied.companyPhone; }
+          selectedContact = { ...selectedContact, ...applied };
+        }
 
         // Drop the keys we just applied so they don't reappear as suggestions
         for (const k of Object.keys(fields)) delete lastEnrichmentSuggested[k];
@@ -1309,6 +1324,8 @@ document.getElementById('enrich-btn').addEventListener('click', async () => {
       'Twitter / X':   found.twitter        ?? null,
       'Company Domain':found.companyDomain  ?? null,
       'Address':       found.address1       ?? null,
+      'Phone':         found.companyPhone   ?? null,
+      'Company':       found.companyName    ?? null,
     };
 
     // Re-fetch the contact so the table reflects what was actually written to Growably,
@@ -1360,7 +1377,7 @@ document.getElementById('enrich-btn').addEventListener('click', async () => {
 
   } catch (e) {
     resultEl.className = 'enrich-result enrich-result-error';
-    resultEl.innerHTML = `<h3>Enrichment failed</h3><p style="font-size:13px;color:var(--color-gray-text)">${e.message}</p>`;
+    resultEl.innerHTML = `<h3>Enrichment failed</h3><p style="font-size:13px;color:var(--color-gray-text)">${esc(e.message)}</p>`;
     resultEl.classList.remove('hidden');
     toast(e.message, 'error');
   } finally {
@@ -1531,8 +1548,7 @@ document.querySelectorAll('input[name="bulk-scope"]').forEach(radio => {
 /** Fetch the current bulk job state from the worker and update the UI. */
 async function pollBulkStatus() {
   try {
-    const res = await fetch(`${API_BASE}/api/bulk/status`);
-    const { job } = await res.json();
+    const { job } = await api('/api/bulk/status');
     updateBulkUI(job);
   } catch (e) {
     document.getElementById('bulk-status-note').textContent = `Cannot reach API: ${e.message}`;
@@ -1639,8 +1655,12 @@ document.getElementById('bulk-start-btn').addEventListener('click', async () => 
 });
 
 document.getElementById('bulk-pause-btn').addEventListener('click', async () => {
-  await fetch(`${API_BASE}/api/bulk/pause`, { method: 'POST' });
+  try {
+    await api('/api/bulk/pause', { method: 'POST' });
+    toast('Bulk enrichment paused.', 'info');
+  } catch (e) {
+    toast(`Pause failed: ${e.message}`, 'error');
+  }
   await pollBulkStatus();
-  toast('Bulk enrichment paused.', 'info');
 });
 

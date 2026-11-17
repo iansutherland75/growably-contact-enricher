@@ -647,6 +647,7 @@ app.post('/api/bulk/pause', async (c) => {
 });
 
 app.get('/api/bulk/status', async (c) => {
+  if (!(await requireSuperuser(c))) return forbidden(c);
   const job = await c.env.ENRICH_KV.get('bulk_job', 'json');
   return c.json({ job: job ?? null });
 });
@@ -704,7 +705,7 @@ async function searchContactsPage(filter, page, limit, env) {
  * plan: each enrichment makes 10 to 20 subrequests and the Free plan caps an
  * invocation at 50.
  */
-async function runBulkBatch(rawEnv) {
+export async function runBulkBatch(rawEnv) {
   const env = await runtimeEnv(rawEnv);
   const job = await env.ENRICH_KV.get('bulk_job', 'json');
   if (!job || job.status !== 'running') return;
@@ -725,7 +726,12 @@ async function runBulkBatch(rawEnv) {
       const data = await searchContactsPage(job.filter, job.searchPage ?? 1, BATCH_SIZE, env);
       // Search results use a different shape; re-fetch each hit so enrichContact sees a standard contact
       const hits = data?.contacts ?? [];
-      contacts = (await Promise.all(hits.map(h => getContactById(h.id, env).catch(() => null)))).filter(Boolean);
+      const loaded = await Promise.all(hits.map(h => getContactById(h.id, env).catch(() => null)));
+      contacts = loaded.filter(Boolean);
+      // A hit that fails to load still counts, as failed, so the job reaches its total.
+      const unloaded = hits.length - contacts.length;
+      job.failed += unloaded;
+      job.processed += unloaded;
       if (job.total === 0 && data?.total) job.total = data.total;
       hasMore = hits.length === BATCH_SIZE;
       job.searchPage = (job.searchPage ?? 1) + 1;
@@ -743,8 +749,7 @@ async function runBulkBatch(rawEnv) {
     if (contacts.length === 0 && !hasMore) {
       job.status = 'complete';
       job.completedAt = new Date().toISOString();
-      await env.ENRICH_KV.put('bulk_job', JSON.stringify(job));
-      return;
+      return saveBatch(job, env);
     }
 
     for (const contact of contacts) {
@@ -769,12 +774,22 @@ async function runBulkBatch(rawEnv) {
       job.status = 'complete';
       job.completedAt = new Date().toISOString();
     }
-    await env.ENRICH_KV.put('bulk_job', JSON.stringify(job));
   } catch (e) {
     job.status = 'error';
     job.error  = e.message;
-    await env.ENRICH_KV.put('bulk_job', JSON.stringify(job));
   }
+  await saveBatch(job, env);
+}
+
+/**
+ * Save a batch's progress. A batch runs for minutes: if someone paused the job
+ * meanwhile, keep the pause; if someone started a new job, leave that job alone.
+ */
+async function saveBatch(job, env) {
+  const now = await env.ENRICH_KV.get('bulk_job', 'json');
+  if (now?.startedAt !== job.startedAt) return;
+  if (now.status !== 'running' && job.status === 'running') job.status = now.status;
+  await env.ENRICH_KV.put('bulk_job', JSON.stringify(job));
 }
 
 // ─── Entry point ──────────────────────────────────────────────────────────────

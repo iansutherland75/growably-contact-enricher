@@ -131,22 +131,25 @@ function cleanCompanyName(raw) {
  * `domain` is the contact's email domain, used to reject Schema.org URLs that
  * point at a staging host or CDN instead of the company's own site.
  */
-function parseSchemaOrg(html, domain) {
+export function parseSchemaOrg(html, domain) {
   const result = {};
+  let telephone;
   const blocks = [...html.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
   for (const b of blocks) {
     let data;
     try { data = JSON.parse(b[1]); } catch { continue; }
-    const nodes = Array.isArray(data) ? data : (data['@graph'] ?? [data]);
-    for (const node of nodes) {
-      const type = node['@type'] ?? '';
+    const nodes = Array.isArray(data) ? data : (data?.['@graph'] ?? [data]);
+    // One odd block (null, a bare value, a non-string @type) is skipped, not fatal.
+    for (const node of [nodes].flat()) {
+      if (!node || typeof node !== 'object') continue;
+      const type = String(node['@type'] ?? '');
       const isOrg = ['Organization','LocalBusiness','Corporation','MedicalBusiness',
                      'ProfessionalService','Store','Restaurant'].some(t => type.includes(t));
       if (!isOrg) continue;
-      if (node.name && !result.companyName) result.companyName = node.name.trim();
-      if (node.telephone && !result.phone) result.phone = node.telephone;
+      if (typeof node.name === 'string' && node.name.trim() && !result.companyName) result.companyName = node.name.trim();
+      if (telephone === undefined && node.telephone != null) telephone = node.telephone;
       // Only use Schema.org url if it's on the same root domain - rejects staging/CDN redirects
-      if (node.url && !result.website) {
+      if (typeof node.url === 'string' && !result.website) {
         try {
           const urlHost = new URL(node.url).hostname.replace(/^www\./, '');
           const domainRoot = domain.replace(/^www\./, '');
@@ -161,13 +164,55 @@ function parseSchemaOrg(html, domain) {
         if (addr.postalCode      && !result.postalCode) result.postalCode = addr.postalCode;
         if (addr.addressCountry  && !result.country) {
           const c = addr.addressCountry;
-          const raw = (typeof c === 'object' ? c.name : c) ?? c;
-          result.country = normaliseCountry(raw);
+          // An object with no name ({ "@type": "Country" }) gives no country, not "[object Object]".
+          const country = normaliseCountry(typeof c === 'object' ? c?.name : c);
+          if (country) result.country = country;
         }
       }
     }
   }
+  // The phone is decided once, against the country from any node: an @graph often
+  // puts the telephone and the address on different nodes.
+  const phone = telephone === undefined ? null : schemaPhone(telephone, result.country);
+  if (phone) result.phone = phone;
   return result;
+}
+
+// A country we know and that is not Canada or the US: its numbers are never +1.
+const isForeign = (country) => !!country && !['CA', 'US'].includes(country);
+
+// The whole value must have the North American shape: an optional 1 or +1, then
+// 3-3-4 digits. A label in front ("Call", "tel:"), a note in brackets behind and an
+// extension are allowed and dropped.
+const NANP_SHAPE = /^(?:[A-Za-z]+:?\s*)?(?:\(?\+?1\)?[\s.-]*)?\(?([2-9]\d{2})\)?[\s.-]*(\d{3})[\s.-]*(\d{4})(?:\s*,?\s*(?:x|ext\.?|extension|#)\s*\d{1,6})?(?:\s*\([^()\d]*\))?$/i;
+
+/**
+ * The first phone in a value (a list split on / , ; or "or") as E.164 when it has
+ * the North American shape, else null. Unlike extractPhone it never reads a number
+ * out of a longer one, so +442079460958 is not mistaken for +14420794609.
+ */
+export function northAmericanPhone(value) {
+  // A real phone value is short; a long one is page junk, and the pattern slows
+  // down badly on long runs of spaces.
+  if (String(value).length > 60) return null;
+  const first = String(value).split(/\s*(?:[\/,;]|\bor\b)\s*(?=[+(\d])/i)[0].trim();
+  const m = first.match(NANP_SHAPE);
+  return m ? `+1${m[1]}${m[2]}${m[3]}` : null;
+}
+
+/**
+ * A Schema.org telephone (a string, or a list of them) in the same +1 format as
+ * phones found in the page text. A number outside North America, or any number
+ * when the site's address names another country, stays as printed. A bare JSON
+ * number that is not North American is dropped unless the country is known.
+ */
+function schemaPhone(telephone, country) {
+  const raw = [telephone].flat().find((t) => (typeof t === 'string' && t.trim()) || typeof t === 'number');
+  if (raw === undefined) return null;
+  const plus1 = isForeign(country) ? null : northAmericanPhone(raw);
+  if (plus1) return plus1;
+  if (typeof raw === 'number') return isForeign(country) ? String(raw) : null;
+  return raw.trim();
 }
 
 /**
@@ -325,7 +370,8 @@ async function enrichCompanyFromWebsite(domain) {
       if (meta.companyName) result.companyName = meta.companyName;
     }
 
-    if (!result.phone) {
+    // Page text only yields +1 numbers, so it is skipped for a site in another country.
+    if (!result.phone && !isForeign(result.country)) {
       const phone = extractPhone(stripNonContent(html));
       if (phone) result.phone = phone;
     }
@@ -355,7 +401,8 @@ async function enrichCompanyFromSearch(domain, companyName, env) {
     ? `"${companyName}" address phone site:${domain} OR "${companyName}"`
     : `${domain} company address phone`;
 
-  try {
+  {
+    // A Brave failure throws; the caller records it in the Enrich Error field.
     const r = await braveSearch(query, env, 5);
     for (const item of r?.web?.results ?? []) {
       // Phone extraction from Brave snippets is intentionally omitted - one-line
@@ -366,7 +413,7 @@ async function enrichCompanyFromSearch(domain, companyName, env) {
       }
       if (result.companyName) break;
     }
-  } catch { /* non-fatal - enrichContact's error array catches API failures */ }
+  }
 
   return result;
 }
@@ -375,7 +422,7 @@ async function enrichCompanyFromSearch(domain, companyName, env) {
 
 /**
  * Convert a name to Title Case, with special handling for:
- * - Mc/Mac prefixes: McDonald, MacLeod
+ * - Mc prefixes: McDonald (no Mac rule: one for MacLeod also turns Macy into MacY)
  * - O' prefixes: O'Brien, O'Neill
  * - Hyphenated names: Smith-Jones
  */
@@ -387,7 +434,6 @@ function toTitleCase(str) {
     .map(word => {
       if (!word) return word;
       if (word.match(/^mc[a-z]/i)) return 'Mc' + word[2].toUpperCase() + word.slice(3).toLowerCase();
-      if (word.match(/^mac[a-z]/i)) return 'Mac' + word[3].toUpperCase() + word.slice(4).toLowerCase();
       if (word.match(/^o'[a-z]/i)) return "O'" + word[2].toUpperCase() + word.slice(3).toLowerCase();
       if (word.includes('-')) {
         return word.split('-').map(p => p ? p[0].toUpperCase() + p.slice(1).toLowerCase() : p).join('-');
@@ -397,9 +443,13 @@ function toTitleCase(str) {
     .join(' ');
 }
 
-/** Returns true if toTitleCase would change the string - used to detect ALL CAPS or all-lowercase names */
-function needsNormalization(str) {
+/**
+ * True for a name typed ALL CAPS or all lowercase that Title Case would change.
+ * Mixed case is left alone: DeSouza, LeBlanc and Macy are already right.
+ */
+export function needsNormalization(str) {
   if (!str || !str.trim()) return false;
+  if (str !== str.toUpperCase() && str !== str.toLowerCase()) return false;
   return toTitleCase(str) !== str;
 }
 
@@ -415,7 +465,8 @@ function needsNormalization(str) {
  * Example: searching "Jane Nguyen acme.com LinkedIn" might return a result
  * for "Jane Smith" - the slug check catches that.
  */
-function extractLinkedIn(results, lastName) {
+/** The accepted LinkedIn result and its clean URL, so the job title comes from the same profile. */
+function linkedInResult(results, lastName) {
   const slugFragment = lastName
     ? lastName.toLowerCase().replace(/[^a-z0-9]/g, '')
     : null;
@@ -430,7 +481,7 @@ function extractLinkedIn(results, lastName) {
       if (!slug.includes(slugFragment)) continue;
     }
 
-    return cleanUrl;
+    return { url: cleanUrl, result: r };
   }
   return null;
 }
@@ -449,20 +500,17 @@ function extractTwitter(results) {
 }
 
 /**
- * Attempt to extract a job title from LinkedIn search result snippets.
- * LinkedIn snippets typically read: "Name - Title at Company | LinkedIn"
- * or include the title near the person's name. Returns null if nothing confident found.
+ * A job title from the snippet of the LinkedIn result already accepted for this
+ * person (never another result, which can be someone else). Snippets typically
+ * read "Name - Title at Company | LinkedIn". Null if nothing confident is found.
  */
-function extractJobTitle(results, name) {
-  for (const r of results?.web?.results ?? []) {
-    if (!r.url?.includes('linkedin.com')) continue;
-    const desc = r.description ?? r.title ?? '';
-    const m = desc.match(/[-–|]\s*([A-Z][^|–\-]{3,50}?)\s*(?:at|@|\||–|-)/);
-    if (m && plausibleTitle(m[1])) return m[1].trim();
-    const lastName = name.split(' ').pop();
-    const m2 = desc.match(new RegExp(`${lastName}[,.]?\\s*[-–]?\\s*([A-Z][^|.]{3,50})`, 'i'));
-    if (m2 && plausibleTitle(m2[1])) return m2[1].trim();
-  }
+export function jobTitleFrom(result, name) {
+  const desc = result?.description ?? result?.title ?? '';
+  const m = desc.match(/[-–|]\s*([A-Z][^|–\-]{3,50}?)\s*(?:at|@|\||–|-)/);
+  if (m && plausibleTitle(m[1])) return m[1].trim();
+  const lastName = name.split(' ').pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const m2 = desc.match(new RegExp(`${lastName}[,.]?\\s*[-–]?\\s*([A-Z][^|.]{3,50})`, 'i'));
+  if (m2 && plausibleTitle(m2[1])) return m2[1].trim();
   return null;
 }
 
@@ -529,14 +577,15 @@ async function enrichFromApollo(email, env) {
     // in the GHL enrichError field and is visible to the operator
     const body = await res.json().catch(() => ({}));
     const msg = body?.error ?? body?.message ?? body?.errorMessage ?? `HTTP ${res.status}`;
-    throw new Error(`Apollo: ${msg}`);
+    throw new Error(msg); // the caller adds "Apollo: "
   }
 
   const data = await res.json();
   const person = data?.person;
   if (!person) return null;
 
-  const result = {};
+  // Whether a phone reveal was asked for, so the page only says "arriving" when one is coming.
+  const result = { phoneRequested: Boolean(body.reveal_phone_number) };
   if (person.id)           result.apolloId    = person.id; // stored in KV so webhook can resolve email
   if (person.first_name)   result.firstName   = person.first_name;
   if (person.last_name)    result.lastName    = person.last_name;
@@ -592,7 +641,7 @@ function parseEmailUsername(emailUser) {
  * already know to avoid writing a completely wrong name (e.g. a namesake at
  * a different company). Returns an updates object {firstName?, lastName?} or null.
  */
-async function resolveFullName(contact, env) {
+async function resolveFullName(contact, env, errors = []) {
   const firstName = contact.firstName?.trim() || '';
   const lastName  = contact.lastName?.trim()  || '';
   if (firstName && lastName) return null; // nothing to fill
@@ -650,7 +699,10 @@ async function resolveFullName(contact, env) {
       if (!lastName)  updates.lastName  = liLast;
       break;
     }
-  } catch { /* non-fatal */ }
+  } catch (e) {
+    // The names read from the email stay; the failure is recorded, not swallowed.
+    errors.push(`Name completion: ${e.message}`);
+  }
 
   return Object.keys(updates).length ? updates : null;
 }
@@ -740,7 +792,7 @@ export async function enrichContact(contact, env) {
   // ── 0.5. Name completion ─────────────────────────────────────────────────
   if (!firstName || !lastName) {
     try {
-      const nameUpdates = await resolveFullName({ ...contact, firstName, lastName }, env);
+      const nameUpdates = await resolveFullName({ ...contact, firstName, lastName }, env, errors);
       if (nameUpdates) {
         if (nameUpdates.firstName) { updates.firstName = nameUpdates.firstName; found.firstName = nameUpdates.firstName; firstName = nameUpdates.firstName; }
         if (nameUpdates.lastName)  { updates.lastName  = nameUpdates.lastName;  found.lastName  = nameUpdates.lastName;  lastName  = nameUpdates.lastName;  }
@@ -763,9 +815,11 @@ export async function enrichContact(contact, env) {
   if (apollo) {
     // Store apolloId → email in KV (24h TTL) so the async phone webhook can resolve the GHL contact
     if (apollo.apolloId && email) {
-      await env.ENRICH_KV.put(`apollo:${apollo.apolloId}`, email, { expirationTtl: 86400 }).catch(() => {});
+      // Without this mapping the webhook cannot find the contact, so no phone will arrive.
+      const mapped = await env.ENRICH_KV.put(`apollo:${apollo.apolloId}`, email, { expirationTtl: 86400 })
+        .then(() => true, (e) => { errors.push(`Phone reveal: ${e.message}`); return false; });
       // Phone arrives via webhook - signal the frontend so it shows "arriving" rather than "not found"
-      if (env.WORKER_URL && !apollo.mobilePhone) found.phonePending = true;
+      if (mapped && apollo.phoneRequested && !apollo.mobilePhone) found.phonePending = true;
     }
 
     // Only fill name fields if they're still empty after step 0.5
@@ -795,19 +849,19 @@ export async function enrichContact(contact, env) {
   }
 
   // ── 2. LinkedIn + job title (Brave fallback if Apollo had no record) ─────
-  // extractLinkedIn validates the URL slug contains the last name, preventing
+  // linkedInResult validates the URL slug contains the last name, preventing
   // mismatched profiles from being written (see function comment for details).
   // A last name too short to validate against means no search fallback at all.
   const nameIsSearchable = lastName.length >= MIN_LAST_NAME;
   if (!apollo?.linkedinUrl && nameIsSearchable) {
     try {
       const r = await braveSearch(`"${name}" ${company || domain} LinkedIn`, env);
-      const li = extractLinkedIn(r, lastName);
+      const li = linkedInResult(r, lastName);
       if (li) {
-        found.linkedinUrl = li;
-        setField('linkedinUrl', li);
+        found.linkedinUrl = li.url;
+        setField('linkedinUrl', li.url);
         if (!apollo?.jobTitle) {
-          const title = extractJobTitle(r, name);
+          const title = jobTitleFrom(li.result, name);
           if (title) {
             found.jobTitle = title;
             setField('jobTitle', title);
@@ -843,9 +897,12 @@ export async function enrichContact(contact, env) {
 
       const web = await enrichCompanyFromWebsite(domain);
       let co = web;
-      if (!co.companyName || !co.phone) {
-        const search = await enrichCompanyFromSearch(domain, web.companyName || company, env);
-        co = { ...search, ...co }; // website data wins over search data on conflicts
+      // Search only finds a name (it never reads phones from snippets), so it runs only without one.
+      if (!co.companyName) {
+        try {
+          const search = await enrichCompanyFromSearch(domain, web.companyName || company, env);
+          co = { ...search, ...co }; // website data wins over search data on conflicts
+        } catch (e) { errors.push(`Company search: ${e.message}`); }
       }
 
       // Fill empties automatically; surface conflicts as `suggested` so the

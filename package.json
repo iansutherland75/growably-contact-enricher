@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
+    "test": "node --test test/",
     "check": "for f in src/*.js; do node --check \"$f\" || exit 1; done && wrangler deploy --dry-run"
   },
   "dependencies": {
