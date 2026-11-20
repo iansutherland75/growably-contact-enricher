@@ -506,7 +506,7 @@ function extractTwitter(results) {
  */
 export function jobTitleFrom(result, name) {
   const desc = result?.description ?? result?.title ?? '';
-  const m = desc.match(/[-–|]\s*([A-Z][^|–\-]{3,50}?)\s*(?:at|@|\||–|-)/);
+  const m = desc.match(/[-–|]\s*([A-Z][^|–\-]{3,50}?)(?:\s+(?:at\b|@)|\s*[|–-])/);
   if (m && plausibleTitle(m[1])) return m[1].trim();
   const lastName = name.split(' ').pop().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const m2 = desc.match(new RegExp(`${lastName}[,.]?\\s*[-–]?\\s*([A-Z][^|.]{3,50})`, 'i'));
@@ -772,6 +772,8 @@ export async function enrichContact(contact, env) {
       applyFn(nv);
     } else if (cur.toLowerCase() !== nv.toLowerCase()) {
       suggested[foundKey] = nv;
+    } else {
+      delete suggested[foundKey]; // the company site runs after Apollo, so the site wins
     }
   }
 
@@ -800,9 +802,6 @@ export async function enrichContact(contact, env) {
     } catch (e) { errors.push(`Name completion: ${e.message}`); }
   }
 
-  // All subsequent searches use the best available name after normalization + completion
-  const name = `${firstName} ${lastName}`.trim();
-
   // ── 1. Apollo ────────────────────────────────────────────────────────────
   let apollo = null;
   if (email && env.APOLLO_API_KEY) {
@@ -823,8 +822,8 @@ export async function enrichContact(contact, env) {
     }
 
     // Only fill name fields if they're still empty after step 0.5
-    if (apollo.firstName && !firstName) { updates.firstName = apollo.firstName; found.firstName = apollo.firstName; }
-    if (apollo.lastName  && !lastName)  { updates.lastName  = apollo.lastName;  found.lastName  = apollo.lastName;  }
+    if (apollo.firstName && !firstName) { updates.firstName = apollo.firstName; found.firstName = apollo.firstName; firstName = apollo.firstName; }
+    if (apollo.lastName  && !lastName)  { updates.lastName  = apollo.lastName;  found.lastName  = apollo.lastName;  lastName  = apollo.lastName;  }
     if (apollo.jobTitle) {
       found.jobTitle = apollo.jobTitle;
       setField('jobTitle', apollo.jobTitle);
@@ -847,6 +846,9 @@ export async function enrichContact(contact, env) {
     setOrSuggest(contact.state,   apollo.state,   'state',   v => updates.state   = v);
     setOrSuggest(contact.country, apollo.country, 'country', v => updates.country = v);
   }
+
+  // The searches and the result use the best name after normalization, completion and Apollo.
+  const name = `${firstName} ${lastName}`.trim();
 
   // ── 2. LinkedIn + job title (Brave fallback if Apollo had no record) ─────
   // linkedInResult validates the URL slug contains the last name, preventing
